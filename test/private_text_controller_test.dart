@@ -63,18 +63,30 @@ void main() {
   });
 
   group('수정 (F4-2, F4-3)', () {
-    test('수정 중에는 보이고, 커서가 벗어나면 다시 박스', () {
+    test('수정 모드는 커서가 벗어나도 유지되고, ✕(stopEditing)로만 끝난다', () {
       final c = make();
-      c.startEditing(r(3, 5));
+      c.startEditing([r(3, 5)]);
       expect(c.isBoxed(r(3, 5)), isFalse);
       userSelect(c, 0);
-      expect(c.editingRange, isNull);
+      expect(c.editingRange, r(3, 5));
+      expect(c.isBoxed(r(3, 5)), isFalse);
+      c.stopEditing();
+      expect(c.isEditingBox, isFalse);
       expect(c.isBoxed(r(3, 5)), isTrue);
+    });
+
+    test('수정 중인 어절 밖에서 입력한 글자는 가리지 않고, 대상 위치는 따라간다', () {
+      final c = make();
+      c.startEditing([r(3, 5)]);
+      userSelect(c, 0);
+      userSet(c, 'X오늘 비밀 회의', 1);
+      expect(c.hidden, [r(4, 6)]);
+      expect(c.editingRange, r(4, 6));
     });
 
     test('수정 중 입력한 글자도 가려진 어절의 일부가 된다', () {
       final c = make();
-      c.startEditing(r(3, 5));
+      c.startEditing([r(3, 5)]);
       userSet(c, '오늘 비밀들 회의', 6);
       expect(c.hidden, [r(3, 6)]);
       expect(c.editingRange, r(3, 6));
@@ -82,7 +94,7 @@ void main() {
 
     test('수정 중 공백으로 나누면 두 어절 모두 가린다', () {
       final c = make();
-      c.startEditing(r(3, 5));
+      c.startEditing([r(3, 5)]);
       userSelect(c, 4);
       userSet(c, '오늘 비 밀 회의', 5);
       expect(c.hidden, [r(3, 4), r(5, 6)]);
@@ -137,9 +149,9 @@ void main() {
       hidden: [r(0, 1), r(4, 5), r(6, 7)],
     );
 
-    test('다음/이전 박스로 이동하고 ✕로 빠져나온다', () {
+    test('드래그 범위의 박스들 안에서만 오가고 ✕로 빠져나온다', () {
       final c = make3();
-      c.startEditing(r(0, 1));
+      c.startEditing([r(0, 1), r(4, 5), r(6, 7)]);
       expect(c.editingIndex, 0);
       c.moveEditing(1);
       expect(c.editingRange, r(4, 5));
@@ -153,6 +165,27 @@ void main() {
       c.stopEditing();
       expect(c.isEditingBox, isFalse);
       expect(c.isBoxed(r(4, 5)), isTrue);
+    });
+
+    test('범위 밖 박스로는 넘어가지 않는다', () {
+      final c = make3();
+      c.startEditing([r(4, 5)]);
+      expect(c.editingCount, 1);
+      c.moveEditing(1);
+      c.moveEditing(-1);
+      expect(c.editingRange, r(4, 5));
+    });
+
+    test('공백으로 나눈 두 조각 모두 대상이 된다', () {
+      final c = make3();
+      c.startEditing([r(4, 5)]);
+      userSet(c, 'a b cx d', 6); // 수정 중 x 입력 → 'cx'
+      expect(c.editingRange, r(4, 6));
+      userSelect(c, 5);
+      userSet(c, 'a b c x d', 6); // c|x 사이에 공백
+      expect(c.hidden, [r(0, 1), r(4, 5), r(6, 7), r(8, 9)]);
+      expect(c.editingCount, 2);
+      expect(c.editingRange, r(6, 7));
     });
   });
 

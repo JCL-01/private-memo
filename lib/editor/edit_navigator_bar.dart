@@ -16,7 +16,7 @@ class EditNavigatorBar extends StatelessWidget {
       builder: (context, _) {
         if (!controller.isEditingBox) return const SizedBox.shrink();
         final i = controller.editingIndex;
-        final n = controller.boxCount;
+        final n = controller.editingCount;
         final theme = Theme.of(context);
         return Material(
           key: const Key('editNavigatorBar'),
@@ -34,13 +34,13 @@ class EditNavigatorBar extends StatelessWidget {
                   const Spacer(),
                   IconButton(
                     key: const Key('editPrevButton'),
-                    tooltip: '이전 박스',
+                    tooltip: '이전 어절',
                     icon: const Icon(Icons.keyboard_arrow_up),
                     onPressed: i > 0 ? () => controller.moveEditing(-1) : null,
                   ),
                   IconButton(
                     key: const Key('editNextButton'),
-                    tooltip: '다음 박스',
+                    tooltip: '다음 어절',
                     icon: const Icon(Icons.keyboard_arrow_down),
                     onPressed: i < n - 1
                         ? () => controller.moveEditing(1)

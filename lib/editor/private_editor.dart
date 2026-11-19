@@ -84,7 +84,7 @@ class _PrivateEditorState extends State<PrivateEditor> {
       if (boxes.isNotEmpty) ...[
         ContextMenuButtonItem(
           label: '수정',
-          onPressed: () => run(() => _c.startEditing(boxes.first)),
+          onPressed: () => run(() => _c.startEditing(boxes)),
         ),
         ContextMenuButtonItem(
           label: '보기',

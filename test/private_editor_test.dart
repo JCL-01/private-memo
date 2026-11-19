@@ -181,7 +181,7 @@ void main() {
     );
     expect(find.byKey(const Key('editNavigatorBar')), findsNothing);
 
-    c.startEditing(r(0, 1));
+    c.startEditing([r(0, 1), r(4, 5)]);
     await tester.pump();
     expect(find.text('1/2'), findsOneWidget);
 

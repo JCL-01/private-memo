@@ -235,6 +235,26 @@ List<HiddenRange> applyEdit(
   return normalizeRanges(out);
 }
 
+/// [ranges]에서 [minus]와 겹치는 글자를 뺀 범위들.
+List<HiddenRange> subtractRanges(
+  List<HiddenRange> ranges,
+  List<HiddenRange> minus,
+) {
+  var out = ranges;
+  for (final m in minus) {
+    out = [
+      for (final r in out)
+        if (!r.overlaps(m.start, m.end))
+          r
+        else ...[
+          if (r.start < m.start) HiddenRange(r.start, m.start),
+          if (r.end > m.end) HiddenRange(m.end, r.end),
+        ],
+    ];
+  }
+  return out;
+}
+
 /// 텍스트 길이를 벗어난 범위를 잘라낸다(저장된 데이터 보호용).
 List<HiddenRange> clampRanges(List<HiddenRange> ranges, int length) {
   return normalizeRanges(
