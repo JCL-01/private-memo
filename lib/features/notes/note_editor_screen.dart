@@ -188,6 +188,8 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                   controller: c,
                   onRecent: () => _jump(c.jumpToRecent),
                   onLast: () => _jump(c.jumpToLast),
+                  onPrev: () => _jump(() => c.moveCurrentWord(-1)),
+                  onNext: () => _jump(() => c.moveCurrentWord(1)),
                 ),
               ],
             ),
@@ -201,11 +203,17 @@ class _PrivateModeBar extends StatelessWidget {
     required this.controller,
     required this.onRecent,
     required this.onLast,
+    required this.onPrev,
+    required this.onNext,
   });
 
   final PrivateTextController controller;
   final VoidCallback onRecent;
   final VoidCallback onLast;
+
+  /// 현재 어절을 이전·다음 어절로 옮기는 화살표. (F2-11)
+  final VoidCallback onPrev;
+  final VoidCallback onNext;
 
   @override
   Widget build(BuildContext context) {
@@ -243,6 +251,22 @@ class _PrivateModeBar extends StatelessWidget {
                     key: const Key('jumpLastButton'),
                     onPressed: onLast,
                     child: const Text('마지막'),
+                  ),
+                  IconButton(
+                    key: const Key('prevWordButton'),
+                    tooltip: '이전 어절',
+                    icon: const Icon(Icons.chevron_left),
+                    onPressed: controller.canMoveCurrentWordBack
+                        ? onPrev
+                        : null,
+                  ),
+                  IconButton(
+                    key: const Key('nextWordButton'),
+                    tooltip: '다음 어절',
+                    icon: const Icon(Icons.chevron_right),
+                    onPressed: controller.canMoveCurrentWordForward
+                        ? onNext
+                        : null,
                   ),
                 ],
               ),

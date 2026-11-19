@@ -28,6 +28,9 @@ class PrivateTextController extends TextEditingController {
   /// 수정 모드에서 오갈 어절들(드래그 범위에 걸친 박스). 비어 있으면 수정 모드 아님. (F4-2)
   List<HiddenRange> _targets = [];
 
+  /// [_targets] 각각이 드래그로 가린 어절인지. 가린 어절이면 수정 중 새로 쓴 글자도 가린다.
+  List<bool> _targetHidden = [];
+
   /// 지금 수정 중인 어절의 [_targets] 인덱스.
   int _targetIndex = 0;
 
@@ -161,9 +164,8 @@ class PrivateTextController extends TextEditingController {
         edit.start >= editing.start &&
         edit.oldEnd <= editing.end;
     // 드래그로 가린 어절을 수정할 때만 새 글자도 가린다. (F4-3)
-    final editingHiddenWord =
-        inEditingWord &&
-        _hidden.any((h) => h.overlaps(editing.start, editing.end));
+    // 어절을 다 지운 뒤 그 자리에 다시 써도 마찬가지다. (F4-2e)
+    final editingHiddenWord = inEditingWord && _targetHidden[_targetIndex];
 
     _history.recordEdit(EditorSnapshot(old.text, old.selection, _hidden), edit);
     _hidden = applyEdit(_hidden, edit, hideInserted: editingHiddenWord);
@@ -248,25 +250,30 @@ class PrivateTextController extends TextEditingController {
   void _remapTargets(TextEdit edit, bool inEditingWord, int cursor) {
     if (_targets.isEmpty) return;
     final next = <HiddenRange>[];
+    final flags = <bool>[];
     var nextIndex = -1;
     for (var i = 0; i < _targets.length; i++) {
       final isCurrent = i == _targetIndex;
-      final pieces = applyEdit(
+      var pieces = applyEdit(
         [_targets[i]],
         edit,
         hideInserted: isCurrent && inEditingWord,
       );
       if (isCurrent) {
         if (pieces.isEmpty) {
-          nextIndex = next.length; // 지워졌으면 다음 대상으로
+          // 어절을 다 지워도 수정 모드는 이어지고, 그 자리가 계속 수정 대상이다. (F4-2e)
+          final at = inEditingWord ? edit.start : _targets[i].start;
+          pieces = [HiddenRange(at, at)];
+          nextIndex = next.length;
         } else {
           final at = pieces.indexWhere((p) => p.touches(cursor));
           nextIndex = next.length + (at < 0 ? pieces.length - 1 : at);
         }
       }
       next.addAll(pieces);
+      flags.addAll(List.filled(pieces.length, _targetHidden[i]));
     }
-    _setTargets(next, nextIndex);
+    _setTargets(next, nextIndex, flags);
   }
 
   /// 되돌리기·가리기·해제처럼 글자나 범위가 통째로 바뀐 뒤 대상을 다시 맞춘다.
@@ -279,15 +286,28 @@ class PrivateTextController extends TextEditingController {
     for (final t in _targets) {
       final a = t.start.clamp(0, len);
       final b = t.end.clamp(0, len);
+      if (t == current && a == b) {
+        next.add(HiddenRange(a, a)); // 비어 있는 수정 자리는 그대로
+        continue;
+      }
       next.addAll(wordsOverlapping(text, a, a == b ? a : b));
     }
     final list = next.toList()..sort((x, y) => x.start.compareTo(y.start));
-    final at = list.indexWhere((w) => w.overlaps(current.start, current.end));
-    _setTargets(list, at < 0 ? _targetIndex : at);
+    final at = list.indexWhere(
+      (w) => w == current || w.overlaps(current.start, current.end),
+    );
+    final wasHidden = _targetHidden.isNotEmpty && _targetHidden[_targetIndex];
+    _setTargets(list, at < 0 ? _targetIndex : at, [
+      for (final w in list)
+        w.isEmpty ? wasHidden : _hidden.any((h) => h.overlaps(w.start, w.end)),
+    ]);
   }
 
-  void _setTargets(List<HiddenRange> next, int index) {
+  void _setTargets(List<HiddenRange> next, int index, [List<bool>? hidden]) {
     _targets = next;
+    _targetHidden =
+        hidden ??
+        [for (final t in next) _hidden.any((h) => h.overlaps(t.start, t.end))];
     _targetIndex = next.isEmpty ? 0 : index.clamp(0, next.length - 1);
   }
 
@@ -432,6 +452,49 @@ class PrivateTextController extends TextEditingController {
   void jumpToRecent() {
     final at = _lastEditOffset;
     _moveCursorTo(at == null ? _lastWordEnd : at.clamp(0, text.length));
+  }
+
+  /// 프라이빗 모드 화살표: 현재 어절을 이전(-1)/다음(+1) 어절로 옮긴다. (F2-11)
+  void moveCurrentWord(int step) {
+    final words = allWords(text);
+    if (words.isEmpty) return;
+    final i = words.indexWhere((w) => w.touches(_anchor));
+    final int target;
+    if (i >= 0) {
+      target = i + step;
+    } else {
+      final before = words.where((w) => w.end < _anchor).length;
+      target = step < 0 ? before - 1 : before;
+    }
+    if (target < 0 || target >= words.length) return;
+    _moveCursorTo(words[target].end);
+  }
+
+  /// 프라이빗 모드 화살표 사용 가능 여부.
+  bool get canMoveCurrentWordBack {
+    final words = allWords(text);
+    if (words.isEmpty) return false;
+    final i = words.indexWhere((w) => w.touches(_anchor));
+    return i >= 0 ? i > 0 : words.first.end < _anchor;
+  }
+
+  bool get canMoveCurrentWordForward {
+    final words = allWords(text);
+    if (words.isEmpty) return false;
+    final i = words.indexWhere((w) => w.touches(_anchor));
+    return i >= 0 ? i < words.length - 1 : words.last.start > _anchor;
+  }
+
+  /// Esc: 수정 모드와 보기를 모두 끝낸다. (F4-10)
+  bool exitModes() {
+    final had = isEditingBox || _revealed.isNotEmpty;
+    _revealed = {};
+    if (isEditingBox) {
+      stopEditing();
+    } else if (had) {
+      notifyListeners();
+    }
+    return had;
   }
 
   /// `마지막`: 문서의 마지막 어절로 이동한다. (F2-7)

@@ -106,4 +106,21 @@ void main() {
     expect(c.isBoxed(r(3, 5)), isFalse);
     expect(c.isBoxed(r(0, 2)), isTrue);
   });
+
+  test('화살표로 현재 어절을 앞뒤로 옮긴다 (F2-11)', () {
+    final c = make(); // 커서는 끝(w6)
+    expect(c.canMoveCurrentWordForward, isFalse);
+    c.moveCurrentWord(-1);
+    expect(c.currentWord, r(15, 17)); // w5
+    expect(c.isBoxed(r(15, 17)), isFalse);
+    expect(c.isBoxed(r(18, 20)), isFalse); // 바로 뒤 어절은 회색으로 보임
+    expect(c.isBoxed(r(9, 11)), isTrue);
+    c.moveCurrentWord(1);
+    expect(c.currentWord, r(18, 20));
+    for (var i = 0; i < 10; i++) {
+      c.moveCurrentWord(-1);
+    }
+    expect(c.currentWord, r(0, 2));
+    expect(c.canMoveCurrentWordBack, isFalse);
+  });
 }
