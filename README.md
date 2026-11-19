@@ -55,3 +55,8 @@ lib/
 test/                       단위·위젯 테스트
 docs/PRD.md                 제품 요구사항(PRD)
 ```
+
+## 함께 들어 있는 외부 자료
+- `assets/dict/ko.aff`, `ko.dic`: 한국어 맞춤법 사전 [hunspell-dict-ko](https://github.com/spellcheck-ko/hunspell-dict-ko) (GPL-3.0 등, `assets/dict/LICENSE-ko-dictionary.md`). 앱 코드와 분리된 데이터 파일로 사용한다.
+- `lib/spell/hunspell/`: Dart Hunspell 엔진, `universal_spell_check` 0.1.2에서 가져옴 (MIT, `lib/spell/hunspell/LICENSE`).
+- 두 라이선스는 앱의 라이선스 화면(LicenseRegistry)에도 등록되어 있다.

@@ -109,11 +109,13 @@ void main() {
   });
 
   group('보기 (F4-4)', () {
-    test('보기로 연 박스는 다른 곳을 누르면 다시 가려진다', () {
+    test('커서가 움직이는 것만으로는 보기가 닫히지 않는다(손을 뗄 때 닫힘)', () {
       final c = make();
       c.reveal([r(3, 5)]);
       expect(c.isBoxed(r(3, 5)), isFalse);
       userSelect(c, 0);
+      expect(c.isBoxed(r(3, 5)), isFalse);
+      c.dismissReveal();
       expect(c.isBoxed(r(3, 5)), isTrue);
     });
 
@@ -149,31 +151,27 @@ void main() {
       hidden: [r(0, 1), r(4, 5), r(6, 7)],
     );
 
-    test('드래그 범위의 박스들 안에서만 오가고 ✕로 빠져나온다', () {
+    test('수정 범위의 모든 어절이 박스에서 풀리고, 수정 완료로 다시 박스 (F4-2)', () {
       final c = make3();
-      c.startEditing([r(0, 1), r(4, 5), r(6, 7)]);
-      expect(c.editingIndex, 0);
-      c.moveEditing(1);
-      expect(c.editingRange, r(4, 5));
-      expect(c.isBoxed(r(0, 1)), isTrue);
-      c.moveEditing(1);
-      expect(c.editingRange, r(6, 7));
-      c.moveEditing(1); // 마지막에서는 그대로
-      expect(c.editingRange, r(6, 7));
-      c.moveEditing(-1);
-      expect(c.editingRange, r(4, 5));
+      c.startEditing([r(4, 5), r(6, 7)]);
+      expect(c.editingRanges, [r(4, 5), r(6, 7)]);
+      expect(c.isBoxed(r(4, 5)), isFalse);
+      expect(c.isBoxed(r(6, 7)), isFalse);
+      expect(c.isBoxed(r(0, 1)), isTrue); // 범위 밖은 박스
+      expect(c.selection.baseOffset, 5); // 첫 어절 끝
       c.stopEditing();
       expect(c.isEditingBox, isFalse);
       expect(c.isBoxed(r(4, 5)), isTrue);
+      expect(c.isBoxed(r(6, 7)), isTrue);
     });
 
-    test('범위 밖 박스로는 넘어가지 않는다', () {
+    test('범위 안 어느 어절에서든 고칠 수 있고, 새 글자도 가린다', () {
       final c = make3();
-      c.startEditing([r(4, 5)]);
-      expect(c.editingCount, 1);
-      c.moveEditing(1);
-      c.moveEditing(-1);
-      expect(c.editingRange, r(4, 5));
+      c.startEditing([r(4, 5), r(6, 7)]);
+      userSelect(c, 7);
+      userSet(c, 'a b c dx', 8);
+      expect(c.hidden, [r(0, 1), r(4, 5), r(6, 8)]);
+      expect(c.editingRanges, [r(4, 5), r(6, 8)]);
     });
 
     test('공백으로 나눈 두 조각 모두 대상이 된다', () {
@@ -250,7 +248,7 @@ void main() {
       expect(c.isBoxed(r(3, 4)), isTrue);
     });
 
-    test('빈 자리에서 다른 대상으로 갔다가 돌아와도 이어서 쓸 수 있다', () {
+    test('빈 자리에서 다른 어절로 갔다가 돌아와도 이어서 쓸 수 있다', () {
       final c = PrivateTextController(
         text: 'a bb cc',
         hidden: [r(2, 4), r(5, 7)],
@@ -258,11 +256,9 @@ void main() {
       c.startEditing([r(2, 4), r(5, 7)]);
       userSet(c, 'a b cc', 3);
       userSet(c, 'a  cc', 2);
-      expect(c.editingRange, r(2, 2));
-      c.moveEditing(1);
-      expect(c.editingRange, r(3, 5));
-      c.moveEditing(-1);
-      expect(c.editingRange, r(2, 2));
+      expect(c.editingRanges, [r(2, 2), r(3, 5)]);
+      userSelect(c, 5);
+      userSelect(c, 2);
       userSet(c, 'a x cc', 3);
       expect(c.hidden, [r(2, 3), r(4, 6)]);
     });

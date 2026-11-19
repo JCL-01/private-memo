@@ -19,8 +19,11 @@ enum Shade {
   /// 박스.
   box,
 
-  /// `수정`·`보기`로 잠시 박스에서 벗어난 어절: 파란색. (F4-8)
+  /// `수정` 중이라 박스에서 벗어난 어절: 파란색. (F4-8)
   focus,
+
+  /// `보기`로 잠시 박스에서 벗어난 어절: 주황색. (F4-8)
+  peek,
 }
 
 /// 공백으로 나뉜 모든 어절.
@@ -63,21 +66,32 @@ class ShadeMap {
   }
 }
 
-/// 일반 모드: [hidden] 중 [visible](수정 중·보기 중)을 뺀 부분이 박스.
-/// [visible]은 파란색.
+/// 일반 모드: [hidden]은 박스. 단 [editing](수정 중)은 파란색, [revealed](보기)는 주황색.
 ShadeMap normalShades(
   String text,
-  List<HiddenRange> hidden,
-  List<HiddenRange> visible,
-) {
+  List<HiddenRange> hidden, {
+  List<HiddenRange> editing = const [],
+  Iterable<HiddenRange> revealed = const [],
+}) {
   final map = ShadeMap(text.length);
   for (final r in hidden) {
     map.paint(r, Shade.box);
   }
-  for (final v in visible) {
+  _paintSpecial(map, editing, revealed);
+  return map;
+}
+
+void _paintSpecial(
+  ShadeMap map,
+  List<HiddenRange> editing,
+  Iterable<HiddenRange> revealed,
+) {
+  for (final v in revealed) {
+    map.paint(v, Shade.peek);
+  }
+  for (final v in editing) {
     map.paint(v, Shade.focus);
   }
-  return map;
 }
 
 /// 프라이빗 모드 표시. [anchor]는 커서 위치(현재 어절 기준점).
@@ -85,8 +99,13 @@ ShadeMap normalShades(
 /// - 커서가 어절에 붙어 있으면 그 어절이 현재 어절.
 /// - 커서가 공백 사이에 있으면 현재 어절은 없고, 커서 바로 앞뒤 어절이 회색.
 /// - 드래그로 가린 어절이라도 현재 어절과 바로 앞뒤 어절은 보인다. (F2-9)
-/// - [visible](수정 중·보기 중)은 항상 파란색으로 보인다.
-ShadeMap privateShades(String text, int anchor, List<HiddenRange> visible) {
+/// - [editing](수정 중)은 파란색, [revealed](보기)는 주황색으로 항상 보인다.
+ShadeMap privateShades(
+  String text,
+  int anchor, {
+  List<HiddenRange> editing = const [],
+  Iterable<HiddenRange> revealed = const [],
+}) {
   final map = ShadeMap(text.length);
   final words = allWords(text);
   final current = words.indexWhere((w) => w.touches(anchor));
@@ -114,8 +133,6 @@ ShadeMap privateShades(String text, int anchor, List<HiddenRange> visible) {
     }
     map.paint(words[i], s);
   }
-  for (final v in visible) {
-    map.paint(v, Shade.focus);
-  }
+  _paintSpecial(map, editing, revealed);
   return map;
 }

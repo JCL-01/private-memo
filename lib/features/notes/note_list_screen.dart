@@ -7,6 +7,7 @@ import '../../data/providers.dart';
 import '../../editor/box_colors.dart';
 import '../../editor/hidden_ranges.dart';
 import '../../editor/masked_text.dart';
+import '../../spell/spell_providers.dart';
 import 'date_label.dart';
 import 'note_editor_screen.dart';
 
@@ -24,6 +25,8 @@ class NoteListScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final notes = ref.watch(notesListProvider);
+    // 맞춤법 사전은 크기 때문에 앱을 켜자마자 백그라운드에서 불러 둔다.
+    ref.watch(spellCheckerProvider);
     final count = notes.value?.length ?? 0;
 
     return Scaffold(

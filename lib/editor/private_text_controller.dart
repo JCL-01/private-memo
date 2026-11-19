@@ -54,9 +54,31 @@ class PrivateTextController extends TextEditingController {
 
   bool _internal = false;
 
+  /// 맞춤법이 틀린 어절(밑줄). 검사기가 채운다. (F2-5, F6-2)
+  List<HiddenRange> _misspelled = const [];
+
   // ───────────────────────── 상태 조회 ─────────────────────────
 
   List<HiddenRange> get hidden => List.unmodifiable(_hidden);
+
+  /// 맞춤법 밑줄을 그을 범위.
+  List<HiddenRange> get misspelled => _misspelled;
+
+  /// 맞춤법 검사 결과를 반영한다.
+  void setMisspelled(List<HiddenRange> ranges) {
+    if (_sameRanges(ranges, _misspelled)) return;
+    _misspelled = List.unmodifiable(ranges);
+    notifyListeners();
+  }
+
+  static bool _sameRanges(List<HiddenRange> a, List<HiddenRange> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
   Set<HiddenRange> get revealedRanges => Set.unmodifiable(_revealed);
   bool get canUndo => _history.canUndo;
   bool get canRedo => _history.canRedo;
@@ -91,19 +113,16 @@ class PrivateTextController extends TextEditingController {
   /// ✕를 눌러야만 끝난다. (F4-2b)
   bool get isEditingBox => _targets.isNotEmpty;
 
-  /// 수정 중인 어절이 대상 중 몇 번째인지(0부터). 수정 모드가 아니면 -1.
-  int get editingIndex => _targets.isEmpty ? -1 : _targetIndex;
-
   /// 수정 모드에서 오갈 수 있는 어절 수.
   int get editingCount => _targets.length;
 
-  /// 지금 보이는 특별 범위: 수정 중인 어절 + `보기`로 연 어절.
-  List<HiddenRange> get _visible => [?editingRange, ..._revealed];
+  /// 수정 모드에서 박스가 풀린 어절들(수정 범위의 모든 어절). (F4-2)
+  List<HiddenRange> get editingRanges => List.unmodifiable(_targets);
 
   /// 글자별 표시 방식(박스, 회색 단계).
   ShadeMap get shades => _privateMode
-      ? privateShades(text, _anchor, _visible)
-      : normalShades(text, _hidden, _visible);
+      ? privateShades(text, _anchor, editing: _targets, revealed: _revealed)
+      : normalShades(text, _hidden, editing: _targets, revealed: _revealed);
 
   /// 지금 박스로 보이는 구간들.
   List<HiddenRange> get boxes => shades.rangesOf(Shade.box);
@@ -158,17 +177,26 @@ class PrivateTextController extends TextEditingController {
         ? next.selection.baseOffset
         : null;
     final edit = diffText(old.text, next.text, cursor: cursor);
-    final editing = editingRange;
-    final inEditingWord =
-        editing != null &&
-        edit.start >= editing.start &&
-        edit.oldEnd <= editing.end;
+    // 수정 범위 안 어느 어절에서든 고칠 수 있다. 고친 어절이 지금 수정 중인 어절이 된다.
+    final hit = _targets.indexWhere(
+      (t) => edit.start >= t.start && edit.oldEnd <= t.end,
+    );
+    if (hit >= 0) _targetIndex = hit;
+    final inEditingWord = hit >= 0;
     // 드래그로 가린 어절을 수정할 때만 새 글자도 가린다. (F4-3)
     // 어절을 다 지운 뒤 그 자리에 다시 써도 마찬가지다. (F4-2e)
     final editingHiddenWord = inEditingWord && _targetHidden[_targetIndex];
 
     _history.recordEdit(EditorSnapshot(old.text, old.selection, _hidden), edit);
     _hidden = applyEdit(_hidden, edit, hideInserted: editingHiddenWord);
+    // 고친 어절의 밑줄은 다시 검사할 때까지 지우고, 뒤쪽 밑줄은 위치만 옮긴다.
+    _misspelled = [
+      for (final m in _misspelled)
+        if (m.end < edit.start)
+          m
+        else if (m.start > edit.oldEnd)
+          HiddenRange(m.start + edit.delta, m.end + edit.delta),
+    ];
     _revealed = {};
     final end = cursor ?? edit.start + edit.inserted.length;
     _remapTargets(edit, inEditingWord, end);
@@ -185,8 +213,13 @@ class PrivateTextController extends TextEditingController {
   void _onSelectionChange(TextEditingValue old, TextEditingValue next) {
     var value = next;
     final sel = next.selection;
-    // IME 동기화처럼 커서가 그대로인 값 갱신에서는 `보기`를 유지한다.
-    if (sel != old.selection) _revealed = {};
+    // `보기`는 커서가 바뀔 때가 아니라 화면에서 손가락·마우스를 뗄 때 닫는다. (F4-4)
+
+    // 수정 범위 안의 어절로 커서가 가면 그 어절을 지금 수정 중인 어절로 삼는다.
+    if (sel.isValid && sel.isCollapsed) {
+      final t = _targets.indexWhere((t) => t.touches(sel.baseOffset));
+      if (t >= 0) _targetIndex = t;
+    }
 
     // 프라이빗 모드: 클릭·터치로는 커서와 현재 어절이 바뀌지 않는다.
     // 현재 어절 안에서의 이동(방향키 등)만 허용한다. 현재 어절은 `수정`·`최근`·`마지막`으로만 바꾼다. (F2-10)
@@ -194,7 +227,9 @@ class PrivateTextController extends TextEditingController {
       if (sel.isValid && sel.isCollapsed && next.composing.isCollapsed) {
         final off = sel.baseOffset;
         final current = currentWord;
-        if (current != null && off >= current.start && off <= current.end) {
+        final inTarget = _targets.any((t) => t.touches(off));
+        if (inTarget ||
+            (current != null && off >= current.start && off <= current.end)) {
           _anchor = off;
         } else if (off != _anchor) {
           value = next.copyWith(
@@ -386,8 +421,8 @@ class PrivateTextController extends TextEditingController {
     _applyAction(next, sel);
   }
 
-  /// `수정`: [targets] 중 첫 어절을 현재 어절로 만들어 편집한다(수정 모드). (F4-2)
-  /// 이후 ▲▼로 [targets] 안에서만 오간다.
+  /// `수정`: [targets](수정 범위의 모든 어절)의 박스를 풀어 파란색으로 보이고 편집한다(수정 모드). (F4-2)
+  /// 커서는 첫 어절 끝에 놓인다.
   void startEditing(List<HiddenRange> targets) {
     if (targets.isEmpty) return;
     _history.breakGroup();
@@ -397,17 +432,7 @@ class PrivateTextController extends TextEditingController {
     _moveCursorTo(editingRange!.end);
   }
 
-  /// 수정 모드에서 이전(-1)/다음(+1) 어절로 이동한다. (F4-2a)
-  void moveEditing(int step) {
-    if (_targets.isEmpty) return;
-    final next = _targetIndex + step;
-    if (next < 0 || next >= _targets.length) return;
-    _history.breakGroup();
-    _targetIndex = next;
-    _moveCursorTo(editingRange!.end);
-  }
-
-  /// 수정 모드에서 빠져나온다(✕). 어절은 다시 박스가 된다. (F4-2b)
+  /// `수정 완료`(또는 Esc): 수정 모드에서 빠져나온다. 어절들은 다시 박스가 된다. (F4-2b)
   void stopEditing() {
     if (_targets.isEmpty) return;
     _setTargets([], 0);
@@ -527,6 +552,7 @@ class PrivateTextController extends TextEditingController {
     if (s == null) return;
     _hidden = s.hidden;
     _revealed = {};
+    _misspelled = const [];
     final selection = s.selection.isValid
         ? s.selection
         : TextSelection.collapsed(offset: s.text.length);
@@ -555,6 +581,7 @@ class PrivateTextController extends TextEditingController {
           box: boxColorOf(context),
           near: textColor.withValues(alpha: 0.5),
           focus: focusColorOf(context),
+          peek: peekColorOf(context),
         ),
         composing: withComposing && value.isComposingRangeValid
             ? value.composing
@@ -566,13 +593,16 @@ class PrivateTextController extends TextEditingController {
 
 /// 회색 단계와 박스 색.
 class ShadePalette {
-  const ShadePalette({required this.box, this.near, this.focus});
+  const ShadePalette({required this.box, this.near, this.focus, this.peek});
 
   final Color box;
   final Color? near;
 
-  /// `수정`·`보기`로 잠시 열린 어절 색(파란색). (F4-8)
+  /// `수정` 중인 어절 색(파란색). (F4-8)
   final Color? focus;
+
+  /// `보기`로 잠시 연 어절 색(주황색). (F4-8)
+  final Color? peek;
 }
 
 /// [shades]에 따라 글자를 그린다.
@@ -592,6 +622,7 @@ List<InlineSpan> buildShadedSpans({
     Shade.near => TextStyle(color: palette.near),
     Shade.box => boxStyle,
     Shade.focus => TextStyle(color: palette.focus),
+    Shade.peek => TextStyle(color: palette.peek),
   };
   const composingStyle = TextStyle(decoration: TextDecoration.underline);
 
