@@ -38,9 +38,20 @@ class NotesRepository {
     return note;
   }
 
-  Future<void> updateContent(String id, String content) {
+  /// 본문과 가린 범위(JSON)를 저장한다. [hiddenRanges]를 생략하면 본문만 바꾼다.
+  Future<void> updateContent(
+    String id,
+    String content, {
+    String? hiddenRanges,
+  }) {
     return (_db.update(_db.notes)..where((n) => n.id.equals(id))).write(
-      NotesCompanion(content: Value(content), updatedAt: Value(_clock())),
+      NotesCompanion(
+        content: Value(content),
+        hiddenRanges: hiddenRanges == null
+            ? const Value.absent()
+            : Value(hiddenRanges),
+        updatedAt: Value(_clock()),
+      ),
     );
   }
 

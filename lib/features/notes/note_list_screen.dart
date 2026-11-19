@@ -4,6 +4,9 @@ import 'package:material_ui/material_ui.dart';
 import '../../data/database.dart';
 import '../../data/note.dart';
 import '../../data/providers.dart';
+import '../../editor/box_colors.dart';
+import '../../editor/hidden_ranges.dart';
+import '../../editor/private_text_controller.dart';
 import 'date_label.dart';
 import 'note_editor_screen.dart';
 
@@ -107,6 +110,14 @@ class _NoteTile extends ConsumerWidget {
     final subtitleStyle = theme.textTheme.bodyMedium?.copyWith(
       color: theme.colorScheme.onSurfaceVariant,
     );
+    final hidden = note.hidden;
+    final boxColor = boxColorOf(context);
+    final titleLine = note.titleLine;
+    final previewLine = note.previewLine;
+
+    // 목록에서도 가린 부분은 박스로 보인다. (F1-7)
+    List<InlineSpan> masked(String text, List<HiddenRange> boxes) =>
+        buildMaskedSpans(text: text, boxes: boxes, boxColor: boxColor);
 
     return Dismissible(
       key: ValueKey(note.id),
@@ -123,8 +134,15 @@ class _NoteTile extends ConsumerWidget {
         onLongPressStart: (d) => _showMenu(context, ref, d.globalPosition),
         onSecondaryTapUp: (d) => _showMenu(context, ref, d.globalPosition),
         child: ListTile(
-          title: Text(
-            note.title,
+          title: Text.rich(
+            titleLine == null
+                ? const TextSpan(text: '새로운 메모')
+                : TextSpan(
+                    children: masked(
+                      titleLine.text,
+                      titleLine.hiddenIn(hidden),
+                    ),
+                  ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontWeight: FontWeight.w600),
@@ -134,9 +152,10 @@ class _NoteTile extends ConsumerWidget {
               children: [
                 TextSpan(text: formatNoteDate(note.updatedAt)),
                 const TextSpan(text: '  '),
-                TextSpan(
-                  text: note.preview.isEmpty ? '추가 텍스트 없음' : note.preview,
-                ),
+                if (previewLine == null)
+                  const TextSpan(text: '추가 텍스트 없음')
+                else
+                  ...masked(previewLine.text, previewLine.hiddenIn(hidden)),
               ],
             ),
             maxLines: 1,

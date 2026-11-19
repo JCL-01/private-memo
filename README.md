@@ -50,6 +50,7 @@ lib/
   main.dart                 앱 시작
   app/app.dart              테마(라이트/다크), 첫 화면
   data/                     DB, 저장소, Riverpod provider
+  editor/                   프라이빗 에디터(박스, 가린 범위, 되돌리기)
   features/notes/           메모 목록·편집 화면
 test/                       단위·위젯 테스트
 docs/PRD.md                 제품 요구사항(PRD)
