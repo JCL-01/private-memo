@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:private_memo/data/database.dart';
 import 'package:private_memo/data/note.dart';
 import 'package:private_memo/data/notes_repository.dart';
+import 'package:private_memo/editor/hidden_ranges.dart';
 
 void main() {
   late AppDatabase db;
@@ -46,5 +47,22 @@ void main() {
     final loaded = (await repo.getById(note.id))!;
     expect(loaded.title, '장보기');
     expect(loaded.preview, '우유, 계란');
+  });
+
+  test('가린 범위를 저장하고, 목록 제목 줄 기준으로 계산한다', () async {
+    final note = await repo.create();
+    // '  비밀 제목' 의 '비밀' → 본문 [2,4)
+    await repo.updateContent(
+      note.id,
+      '  비밀 제목\n둘째',
+      hiddenRanges: encodeRanges(const [HiddenRange(2, 4)]),
+    );
+    final loaded = (await repo.getById(note.id))!;
+    expect(loaded.hidden, const [HiddenRange(2, 4)]);
+    expect(loaded.titleLine!.text, '비밀 제목');
+    expect(loaded.titleLine!.hiddenIn(loaded.hidden), const [
+      HiddenRange(0, 2),
+    ]);
+    expect(loaded.previewLine!.hiddenIn(loaded.hidden), isEmpty);
   });
 }
