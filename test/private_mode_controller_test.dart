@@ -26,10 +26,11 @@ void main() {
       PrivateTextController(text: text, hidden: hidden, privateMode: true);
 
   test('드래그로 가린 어절도 현재·앞뒤 어절이면 보인다 (F2-9)', () {
-    final c = make(hidden: [r(18, 20), r(15, 17), r(0, 2)]);
+    final c = make(hidden: [r(18, 20), r(15, 17), r(12, 14), r(0, 2)]);
     userSelect(c, 20);
     expect(c.isBoxed(r(18, 20)), isFalse); // 현재
     expect(c.isBoxed(r(15, 17)), isFalse); // 바로 앞
+    expect(c.isBoxed(r(12, 14)), isTrue); // 두 번째 앞은 박스
     expect(c.isBoxed(r(0, 2)), isTrue);
   });
 

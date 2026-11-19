@@ -1,7 +1,7 @@
 /// 화면에 그릴 글자별 표시 방식 계산.
 ///
 /// 일반 모드: 가린 범위는 박스.
-/// 프라이빗 모드: 현재 어절은 그대로, 앞뒤 두 어절씩은 회색 단계, 나머지는 박스. (F2)
+/// 프라이빗 모드: 현재 어절은 그대로, 바로 앞뒤 한 어절씩은 회색, 나머지는 박스. (F2)
 library;
 
 import 'dart:typed_data';
@@ -15,9 +15,6 @@ enum Shade {
 
   /// 현재 어절 바로 앞·뒤 어절: 회색. (F2-2)
   near,
-
-  /// 현재 어절 두 번째 앞·뒤 어절: 더 옅은 회색. (F2-2)
-  far,
 
   /// 박스.
   box,
@@ -86,8 +83,8 @@ ShadeMap normalShades(
 /// 프라이빗 모드 표시. [anchor]는 커서 위치(현재 어절 기준점).
 ///
 /// - 커서가 어절에 붙어 있으면 그 어절이 현재 어절.
-/// - 커서가 공백 사이에 있으면 현재 어절은 없고, 커서 앞뒤 어절부터 회색 단계.
-/// - 드래그로 가린 어절이라도 현재·앞뒤 두 어절은 보인다. (F2-9)
+/// - 커서가 공백 사이에 있으면 현재 어절은 없고, 커서 바로 앞뒤 어절이 회색.
+/// - 드래그로 가린 어절이라도 현재 어절과 바로 앞뒤 어절은 보인다. (F2-9)
 /// - [visible](수정 중·보기 중)은 항상 파란색으로 보인다.
 ShadeMap privateShades(String text, int anchor, List<HiddenRange> visible) {
   final map = ShadeMap(text.length);
@@ -112,8 +109,6 @@ ShadeMap privateShades(String text, int anchor, List<HiddenRange> visible) {
       s = Shade.normal;
     } else if (i == left || i == right) {
       s = Shade.near;
-    } else if (i == left - 1 || i == right + 1) {
-      s = Shade.far;
     } else {
       s = Shade.box;
     }

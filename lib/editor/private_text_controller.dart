@@ -491,7 +491,6 @@ class PrivateTextController extends TextEditingController {
         palette: ShadePalette(
           box: boxColorOf(context),
           near: textColor.withValues(alpha: 0.5),
-          far: textColor.withValues(alpha: 0.25),
           focus: focusColorOf(context),
         ),
         composing: withComposing && value.isComposingRangeValid
@@ -504,11 +503,10 @@ class PrivateTextController extends TextEditingController {
 
 /// 회색 단계와 박스 색.
 class ShadePalette {
-  const ShadePalette({required this.box, this.near, this.far, this.focus});
+  const ShadePalette({required this.box, this.near, this.focus});
 
   final Color box;
   final Color? near;
-  final Color? far;
 
   /// `수정`·`보기`로 잠시 열린 어절 색(파란색). (F4-8)
   final Color? focus;
@@ -529,7 +527,6 @@ List<InlineSpan> buildShadedSpans({
   TextStyle? styleOf(Shade s) => switch (s) {
     Shade.normal => null,
     Shade.near => TextStyle(color: palette.near),
-    Shade.far => TextStyle(color: palette.far),
     Shade.box => boxStyle,
     Shade.focus => TextStyle(color: palette.focus),
   };
