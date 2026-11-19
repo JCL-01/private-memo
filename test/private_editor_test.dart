@@ -45,8 +45,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(c.revealedRanges, {r(3, 5)});
 
-    // 다른 곳을 누르면 다시 가려진다
-    await tester.tapAt(charCenter(tester, 0));
+    // 화면을 누르고 있는 동안에는 열려 있고, 손을 떼면 다시 가려진다 (F4-4)
+    final gesture = await tester.startGesture(charCenter(tester, 0));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(c.revealedRanges, {r(3, 5)});
+    await gesture.up();
     await tester.pump();
     expect(c.revealedRanges, isEmpty);
   });
@@ -183,7 +186,7 @@ void main() {
     expect(c.isBoxed(r(0, 2)), isFalse);
   });
 
-  testWidgets('수정 모드 바: 이동, ✕로 닫으면 바가 사라진다', (tester) async {
+  testWidgets('수정 모드 바: 수정 완료를 누르면 바가 사라진다 (F4-2b)', (tester) async {
     c = PrivateTextController(text: 'a b c', hidden: [r(0, 1), r(4, 5)]);
     await tester.pumpWidget(
       MaterialApp(
@@ -201,14 +204,10 @@ void main() {
 
     c.startEditing([r(0, 1), r(4, 5)]);
     await tester.pump();
-    expect(find.text('1/2'), findsOneWidget);
+    expect(find.text('수정 완료'), findsOneWidget);
+    expect(find.byIcon(Icons.keyboard_arrow_up), findsNothing);
 
-    await tester.tap(find.byKey(const Key('editNextButton')));
-    await tester.pump();
-    expect(c.editingRange, r(4, 5));
-    expect(find.text('2/2'), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('editCloseButton')));
+    await tester.tap(find.byKey(const Key('editDoneButton')));
     await tester.pump();
     expect(c.isEditingBox, isFalse);
     expect(find.byKey(const Key('editNavigatorBar')), findsNothing);

@@ -12,6 +12,7 @@ String summary(String text, ShadeMap map) {
       Shade.near => 'n',
       Shade.box => 'B',
       Shade.focus => 'F',
+      Shade.peek => 'O',
     };
   }).join();
 }
@@ -22,14 +23,11 @@ void main() {
 
   test('현재 어절 그대로, 바로 앞뒤 한 어절씩 회색, 나머지 박스 (F2-1~3)', () {
     // 커서가 w3 끝(11)
-    expect(summary(text, privateShades(text, 11, const [])), 'BBnNnBB');
+    expect(summary(text, privateShades(text, 11)), 'BBnNnBB');
   });
 
   test('문서 끝에서는 앞쪽 한 어절만 회색', () {
-    expect(
-      summary(text, privateShades(text, text.length, const [])),
-      'BBBBBnN',
-    );
+    expect(summary(text, privateShades(text, text.length)), 'BBBBBnN');
   });
 
   test('커서가 공백 사이에 있으면 양옆 어절이 회색', () {
@@ -37,23 +35,24 @@ void main() {
     // 공백 두 개 사이를 만들기 위해 별도 문장 사용
     const t = 'a b  c d e';
     //         0 2  5 7 9   커서 4 = 'b'와 'c' 사이 공백 가운데
-    expect(summary(t, privateShades(t, 4, const [])), 'BnnBB');
+    expect(summary(t, privateShades(t, 4)), 'BnnBB');
   });
 
   test('공백·줄바꿈은 그대로 둔다 (F2-4)', () {
     const t = 'a\nb c';
-    final map = privateShades(t, t.length, const []);
+    final map = privateShades(t, t.length);
     expect(map[1], Shade.normal);
   });
 
-  test('수정 중·보기 중인 어절은 박스가 아니라 파란색이다 (F4-8)', () {
-    final map = privateShades(text, text.length, [r(0, 2)]);
+  test('수정 중인 어절은 파란색, 보기 중인 어절은 주황색 (F4-8)', () {
+    final map = privateShades(text, text.length, editing: [r(0, 2)]);
     expect(map[0], Shade.focus);
-    expect(normalShades(text, [r(0, 2)], [r(0, 2)])[0], Shade.focus);
+    expect(normalShades(text, [r(0, 2)], editing: [r(0, 2)])[0], Shade.focus);
+    expect(normalShades(text, [r(0, 2)], revealed: [r(0, 2)])[0], Shade.peek);
   });
 
   test('일반 모드: 가린 범위만 박스', () {
-    final map = normalShades(text, [r(3, 5)], const []);
+    final map = normalShades(text, [r(3, 5)]);
     expect(summary(text, map), 'NBNNNNN');
   });
 }

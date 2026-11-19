@@ -67,6 +67,12 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  assets:
+    - assets/dict/ko.aff
+    - assets/dict/ko.dic
+    - assets/dict/LICENSE-ko-dictionary.md
+    - lib/spell/hunspell/LICENSE
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

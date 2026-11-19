@@ -97,7 +97,11 @@ class _PrivateEditorState extends State<PrivateEditor> {
     } else {
       _c.releaseAnchor();
     }
-    // 화면을 누르면 `보기`로 연 박스는 다시 가린다. (F4-4)
+  }
+
+  /// 손가락·마우스를 떼면 `보기`로 연 박스를 다시 가린다.
+  /// 누르고 있는 동안에는 가리지 않는다. (F4-4)
+  void _onPointerUp(PointerUpEvent e) {
     _c.dismissReveal();
   }
 
@@ -184,6 +188,7 @@ class _PrivateEditorState extends State<PrivateEditor> {
         child: Listener(
           onPointerDown: _onPointerDown,
           onPointerMove: _onPointerMove,
+          onPointerUp: _onPointerUp,
           child: Stack(
             children: [
               // 박스는 글자 뒤에 같은 높이로 따로 그린다.
