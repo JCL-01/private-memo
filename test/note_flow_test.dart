@@ -95,4 +95,30 @@ void main() {
 
     expect(find.text('우클릭 삭제'), findsNothing);
   });
+
+  testWidgets('프라이빗 버튼으로 켜고 해제로 끄며, 상태가 저장된다', (tester) async {
+    await pumpApp(tester);
+    await tester.tap(find.byKey(const Key('newNoteButton')));
+    await settle(tester);
+    await tester.enterText(find.byKey(const Key('noteEditor')), '하나 둘 셋 넷 다섯');
+    expect(find.byKey(const Key('privateModeBar')), findsNothing);
+
+    await tester.tap(find.text('프라이빗'));
+    await settle(tester);
+    expect(find.byKey(const Key('privateModeBar')), findsOneWidget);
+    expect(find.text('최근'), findsOneWidget);
+    expect(find.text('마지막'), findsOneWidget);
+    expect(find.text('해제'), findsOneWidget);
+
+    await goBack(tester);
+    final saved = await tester.runAsync(() => db.select(db.notes).getSingle());
+    expect(saved!.privateMode, isTrue);
+
+    await tester.tap(find.text('하나 둘 셋 넷 다섯'));
+    await settle(tester);
+    expect(find.byKey(const Key('privateModeBar')), findsOneWidget);
+    await tester.tap(find.text('해제'));
+    await settle(tester);
+    expect(find.byKey(const Key('privateModeBar')), findsNothing);
+  });
 }

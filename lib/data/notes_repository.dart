@@ -55,6 +55,13 @@ class NotesRepository {
     );
   }
 
+  /// 프라이빗 모드 켜짐 여부를 저장한다. 수정 시각은 바꾸지 않는다. (F2-8)
+  Future<void> setPrivateMode(String id, bool on) {
+    return (_db.update(_db.notes)..where((n) => n.id.equals(id))).write(
+      NotesCompanion(privateMode: Value(on)),
+    );
+  }
+
   Future<void> delete(String id) {
     return (_db.delete(_db.notes)..where((n) => n.id.equals(id))).go();
   }

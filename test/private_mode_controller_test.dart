@@ -1,0 +1,99 @@
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:private_memo/editor/hidden_ranges.dart';
+import 'package:private_memo/editor/private_text_controller.dart';
+
+const r = HiddenRange.new;
+
+void userSet(PrivateTextController c, String text, int cursor) {
+  c.value = TextEditingValue(
+    text: text,
+    selection: TextSelection.collapsed(offset: cursor),
+  );
+}
+
+void userSelect(PrivateTextController c, int base, [int? extent]) {
+  c.value = c.value.copyWith(
+    selection: TextSelection(baseOffset: base, extentOffset: extent ?? base),
+  );
+}
+
+void main() {
+  const text = 'w0 w1 w2 w3 w4 w5 w6';
+  //            0  3  6  9  12 15 18
+
+  PrivateTextController make({List<HiddenRange> hidden = const []}) =>
+      PrivateTextController(text: text, hidden: hidden, privateMode: true);
+
+  test('드래그로 가린 어절도 현재·앞뒤 어절이면 보인다 (F2-9)', () {
+    final c = make(hidden: [r(18, 20), r(15, 17), r(0, 2)]);
+    userSelect(c, 20);
+    expect(c.isBoxed(r(18, 20)), isFalse); // 현재
+    expect(c.isBoxed(r(15, 17)), isFalse); // 바로 앞
+    expect(c.isBoxed(r(0, 2)), isTrue);
+  });
+
+  test('박스 가운데를 누르면 박스 끝으로 커서가 가고 그 어절이 현재 어절이 된다', () {
+    final c = make();
+    userSelect(c, 20);
+    expect(c.isBoxed(r(3, 5)), isTrue);
+    userSelect(c, 4); // w1 가운데
+    expect([3, 5], contains(c.selection.baseOffset));
+    expect(c.isBoxed(r(3, 5)), isFalse);
+  });
+
+  test('범위 선택(길게 누르기) 중에는 현재 어절이 바뀌지 않는다', () {
+    final c = make();
+    userSelect(c, 20);
+    userSelect(c, 3, 5);
+    expect(c.isBoxed(r(3, 5)), isTrue);
+    expect(c.boxesForMenu(), [r(3, 5)]);
+  });
+
+  test('우클릭 중에는 현재 어절이 바뀌지 않는다', () {
+    final c = make();
+    userSelect(c, 20);
+    c.holdAnchor();
+    userSelect(c, 4);
+    expect(c.isBoxed(r(3, 5)), isTrue);
+    c.releaseAnchor();
+    userSelect(c, 3);
+    expect(c.isBoxed(r(3, 5)), isFalse);
+  });
+
+  test('최근: 마지막으로 고친 곳으로, 마지막: 마지막 어절로 (F2-6, F2-7)', () {
+    final c = make();
+    userSelect(c, 5);
+    userSet(c, 'w0 w1x w2 w3 w4 w5 w6', 6); // w1 뒤에 x
+    userSelect(c, 0);
+    c.jumpToRecent();
+    expect(c.selection.baseOffset, 6);
+    expect(c.anchor, 6);
+    c.jumpToLast();
+    expect(c.selection.baseOffset, 21);
+  });
+
+  test('마지막: 끝에 공백·줄바꿈이 있어도 마지막 어절 끝으로', () {
+    final c = PrivateTextController(text: 'a b\n\n', privateMode: true);
+    c.jumpToLast();
+    expect(c.selection.baseOffset, 3);
+  });
+
+  test('가리지 않은 어절을 수정해도 새 글자는 가려지지 않는다', () {
+    final c = make();
+    userSelect(c, 20);
+    c.startEditing([r(3, 5)]);
+    userSet(c, 'w0 w1x w2 w3 w4 w5 w6', 6);
+    expect(c.hidden, isEmpty);
+    expect(c.editingRange, r(3, 6));
+  });
+
+  test('프라이빗 모드 끄면 일반 모드 표시로 돌아간다', () {
+    final c = make(hidden: [r(0, 2)]);
+    userSelect(c, 20);
+    expect(c.isBoxed(r(3, 5)), isTrue);
+    c.privateMode = false;
+    expect(c.isBoxed(r(3, 5)), isFalse);
+    expect(c.isBoxed(r(0, 2)), isTrue);
+  });
+}

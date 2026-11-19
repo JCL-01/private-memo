@@ -52,6 +52,12 @@ class _PrivateEditorState extends State<PrivateEditor> {
   void _onPointerDown(PointerDownEvent e) {
     _pointerDownAt = e.position;
     _pointerMoved = false;
+    // 우클릭으로 커서가 옮겨져도 프라이빗 모드의 현재 어절은 그대로 둔다.
+    if (e.buttons & kSecondaryButton != 0) {
+      _c.holdAnchor();
+    } else {
+      _c.releaseAnchor();
+    }
     // 화면을 누르면 `보기`로 연 박스는 다시 가린다. (F4-4)
     _c.dismissReveal();
   }
