@@ -109,6 +109,8 @@ void main() {
     expect(find.text('최근'), findsOneWidget);
     expect(find.text('마지막'), findsOneWidget);
     expect(find.text('해제'), findsOneWidget);
+    expect(find.byKey(const Key('prevWordButton')), findsOneWidget);
+    expect(find.byKey(const Key('nextWordButton')), findsOneWidget);
 
     await goBack(tester);
     final saved = await tester.runAsync(() => db.select(db.notes).getSingle());

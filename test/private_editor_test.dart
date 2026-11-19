@@ -213,4 +213,14 @@ void main() {
     expect(c.isEditingBox, isFalse);
     expect(find.byKey(const Key('editNavigatorBar')), findsNothing);
   });
+
+  testWidgets('Esc 키로 수정 모드에서 빠져나온다', (tester) async {
+    await pumpEditor(tester);
+    await tester.showKeyboard(find.byType(TextField));
+    c.startEditing([r(3, 5)]);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(c.isEditingBox, isFalse);
+  });
 }

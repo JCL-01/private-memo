@@ -231,4 +231,54 @@ void main() {
       expect(c.hidden, [r(2, 4), r(5, 7)]);
     });
   });
+
+  group('수정 중 어절을 다 지웠을 때 (F4-2e)', () {
+    test('수정 모드는 이어지고, 다시 쓴 글자도 가려진다', () {
+      final c = make(); // '오늘 비밀 회의', 비밀 [3,5) 가림
+      c.startEditing([r(3, 5)]);
+      userSet(c, '오늘 비 회의', 4);
+      userSet(c, '오늘  회의', 3);
+      expect(c.isEditingBox, isTrue);
+      expect(c.editingRange, r(3, 3));
+      expect(c.hidden, isEmpty);
+
+      userSet(c, '오늘 새 회의', 4);
+      expect(c.isEditingBox, isTrue);
+      expect(c.editingRange, r(3, 4));
+      expect(c.hidden, [r(3, 4)]);
+      c.stopEditing();
+      expect(c.isBoxed(r(3, 4)), isTrue);
+    });
+
+    test('빈 자리에서 다른 대상으로 갔다가 돌아와도 이어서 쓸 수 있다', () {
+      final c = PrivateTextController(
+        text: 'a bb cc',
+        hidden: [r(2, 4), r(5, 7)],
+      );
+      c.startEditing([r(2, 4), r(5, 7)]);
+      userSet(c, 'a b cc', 3);
+      userSet(c, 'a  cc', 2);
+      expect(c.editingRange, r(2, 2));
+      c.moveEditing(1);
+      expect(c.editingRange, r(3, 5));
+      c.moveEditing(-1);
+      expect(c.editingRange, r(2, 2));
+      userSet(c, 'a x cc', 3);
+      expect(c.hidden, [r(2, 3), r(4, 6)]);
+    });
+  });
+
+  test('Esc: 수정 모드와 보기를 모두 끝낸다 (F4-10)', () {
+    final c = PrivateTextController(
+      text: 'a bb cc',
+      hidden: [r(2, 4), r(5, 7)],
+    );
+    c.reveal([r(5, 7)]);
+    expect(c.exitModes(), isTrue);
+    expect(c.revealedRanges, isEmpty);
+    c.startEditing([r(2, 4)]);
+    expect(c.exitModes(), isTrue);
+    expect(c.isEditingBox, isFalse);
+    expect(c.exitModes(), isFalse);
+  });
 }

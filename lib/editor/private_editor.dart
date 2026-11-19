@@ -15,6 +15,10 @@ class RedoEditIntent extends Intent {
   const RedoEditIntent();
 }
 
+class ExitModesIntent extends Intent {
+  const ExitModesIntent();
+}
+
 /// 프라이빗 드래그와 박스 동작을 지원하는 메모 에디터.
 ///
 /// - 선택 후 메뉴: 기본 메뉴 + `프라이빗` / `해제` (F3)
@@ -80,6 +84,8 @@ class _PrivateEditorState extends State<PrivateEditor> {
     SingleActivator(LogicalKeyboardKey.keyZ, meta: true): UndoEditIntent(),
     SingleActivator(LogicalKeyboardKey.keyZ, meta: true, shift: true):
         RedoEditIntent(),
+    // Esc: 수정·보기에서 빠져나오기 (F4-10)
+    SingleActivator(LogicalKeyboardKey.escape): ExitModesIntent(),
   };
 
   void _onPointerDown(PointerDownEvent e) {
@@ -165,6 +171,12 @@ class _PrivateEditorState extends State<PrivateEditor> {
           RedoEditIntent: CallbackAction<RedoEditIntent>(
             onInvoke: (_) {
               _c.redo();
+              return null;
+            },
+          ),
+          ExitModesIntent: CallbackAction<ExitModesIntent>(
+            onInvoke: (_) {
+              _c.exitModes();
               return null;
             },
           ),
