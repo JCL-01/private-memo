@@ -99,7 +99,7 @@ void main() {
       withComposing: false,
     );
     final boxed = (span.children!.cast<TextSpan>())
-        .where((s) => s.style?.backgroundColor != null)
+        .where((s) => s.style?.decoration == TextDecoration.lineThrough)
         .toList();
     expect(boxed.map((s) => s.text), ['비밀']);
     expect(boxed.single.style!.color!.a, 0);
@@ -154,15 +154,29 @@ void main() {
     expect(c.hidden, isEmpty);
   });
 
-  testWidgets('프라이빗 모드에서는 해제·프라이빗 메뉴가 없다', (tester) async {
-    await pumpEditor(tester);
-    c.privateMode = true;
-    await tester.longPressAt(charCenter(tester, 3));
+  testWidgets('프라이빗 모드: 박스를 길게 눌러도 드러나지 않고, 수정·보기만 뜬다', (tester) async {
+    c = PrivateTextController(text: '하나 둘 셋 넷 다섯 여섯', privateMode: true);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: PrivateEditor(controller: c)),
+      ),
+    );
+    await tester.pump();
+    // 커서가 끝(여섯)에 있으므로 '하나'는 박스
+    expect(c.isBoxed(r(0, 2)), isTrue);
+
+    await tester.longPressAt(charCenter(tester, 0));
     await tester.pumpAndSettle();
+    expect(c.isBoxed(r(0, 2)), isTrue, reason: '길게 눌러 선택해도 박스 유지');
     expect(find.text('수정'), findsOneWidget);
     expect(find.text('보기'), findsOneWidget);
     expect(find.text('해제'), findsNothing);
     expect(find.text('프라이빗'), findsNothing);
+
+    await tester.tap(find.text('수정'));
+    await tester.pumpAndSettle();
+    expect(c.editingRange, r(0, 2));
+    expect(c.isBoxed(r(0, 2)), isFalse);
   });
 
   testWidgets('수정 모드 바: 이동, ✕로 닫으면 바가 사라진다', (tester) async {

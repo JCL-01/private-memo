@@ -50,6 +50,7 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
     final controller = PrivateTextController(
       text: _savedContent,
       hidden: hidden,
+      privateMode: note?.privateMode ?? false,
     );
     _savedHidden = encodeRanges(controller.hidden);
     controller.addListener(_scheduleSave);
@@ -79,6 +80,20 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
       _savedContent,
       hiddenRanges: _savedHidden,
     );
+  }
+
+  /// `프라이빗` / `해제` 버튼. (F2-8)
+  void _togglePrivateMode() {
+    final c = _controller;
+    if (c == null) return;
+    c.privateMode = !c.privateMode;
+    _repo.setPrivateMode(widget.noteId, c.privateMode);
+    _focusNode.requestFocus();
+  }
+
+  void _jump(void Function() move) {
+    _focusNode.requestFocus();
+    move();
   }
 
   Future<void> _delete() async {
@@ -136,6 +151,15 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                 ],
               ),
             ),
+          if (c != null)
+            ListenableBuilder(
+              listenable: c,
+              builder: (context, _) => TextButton(
+                key: const Key('privateModeToggle'),
+                onPressed: _togglePrivateMode,
+                child: Text(c.privateMode ? '해제' : '프라이빗'),
+              ),
+            ),
           IconButton(
             key: const Key('deleteNoteButton'),
             tooltip: '메모 삭제',
@@ -160,8 +184,72 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                   ),
                 ),
                 EditNavigatorBar(controller: c),
+                _PrivateModeBar(
+                  controller: c,
+                  onRecent: () => _jump(c.jumpToRecent),
+                  onLast: () => _jump(c.jumpToLast),
+                ),
               ],
             ),
+    );
+  }
+}
+
+/// 프라이빗 모드일 때만 보이는 이동 버튼: `최근`, `마지막`. (F2-6, F2-7)
+class _PrivateModeBar extends StatelessWidget {
+  const _PrivateModeBar({
+    required this.controller,
+    required this.onRecent,
+    required this.onLast,
+  });
+
+  final PrivateTextController controller;
+  final VoidCallback onRecent;
+  final VoidCallback onLast;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) {
+        if (!controller.privateMode) return const SizedBox.shrink();
+        return Material(
+          key: const Key('privateModeBar'),
+          color: Theme.of(context).colorScheme.surfaceContainer,
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              child: Row(
+                children: [
+                  const SizedBox(width: 8),
+                  Icon(
+                    Icons.visibility_off_outlined,
+                    size: 18,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '프라이빗 모드',
+                    style: Theme.of(context).textTheme.labelMedium,
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    key: const Key('jumpRecentButton'),
+                    onPressed: onRecent,
+                    child: const Text('최근'),
+                  ),
+                  TextButton(
+                    key: const Key('jumpLastButton'),
+                    onPressed: onLast,
+                    child: const Text('마지막'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
