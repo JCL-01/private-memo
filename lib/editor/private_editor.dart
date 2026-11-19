@@ -198,6 +198,7 @@ class _PrivateEditorState extends State<PrivateEditor> {
                             as RenderBox?,
                     boxColor: boxColorOf(context),
                     boxHeight: (widget.style?.fontSize ?? 16) * 0.95,
+                    underlineColor: Theme.of(context).colorScheme.error,
                     repaint: _scroll,
                   ),
                 ),

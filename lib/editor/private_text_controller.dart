@@ -54,9 +54,31 @@ class PrivateTextController extends TextEditingController {
 
   bool _internal = false;
 
+  /// 맞춤법이 틀린 어절(밑줄). 검사기가 채운다. (F2-5, F6-2)
+  List<HiddenRange> _misspelled = const [];
+
   // ───────────────────────── 상태 조회 ─────────────────────────
 
   List<HiddenRange> get hidden => List.unmodifiable(_hidden);
+
+  /// 맞춤법 밑줄을 그을 범위.
+  List<HiddenRange> get misspelled => _misspelled;
+
+  /// 맞춤법 검사 결과를 반영한다.
+  void setMisspelled(List<HiddenRange> ranges) {
+    if (_sameRanges(ranges, _misspelled)) return;
+    _misspelled = List.unmodifiable(ranges);
+    notifyListeners();
+  }
+
+  static bool _sameRanges(List<HiddenRange> a, List<HiddenRange> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
   Set<HiddenRange> get revealedRanges => Set.unmodifiable(_revealed);
   bool get canUndo => _history.canUndo;
   bool get canRedo => _history.canRedo;
@@ -169,6 +191,14 @@ class PrivateTextController extends TextEditingController {
 
     _history.recordEdit(EditorSnapshot(old.text, old.selection, _hidden), edit);
     _hidden = applyEdit(_hidden, edit, hideInserted: editingHiddenWord);
+    // 고친 어절의 밑줄은 다시 검사할 때까지 지우고, 뒤쪽 밑줄은 위치만 옮긴다.
+    _misspelled = [
+      for (final m in _misspelled)
+        if (m.end < edit.start)
+          m
+        else if (m.start > edit.oldEnd)
+          HiddenRange(m.start + edit.delta, m.end + edit.delta),
+    ];
     _revealed = {};
     final end = cursor ?? edit.start + edit.inserted.length;
     _remapTargets(edit, inEditingWord, end);
@@ -527,6 +557,7 @@ class PrivateTextController extends TextEditingController {
     if (s == null) return;
     _hidden = s.hidden;
     _revealed = {};
+    _misspelled = const [];
     final selection = s.selection.isValid
         ? s.selection
         : TextSelection.collapsed(offset: s.text.length);
