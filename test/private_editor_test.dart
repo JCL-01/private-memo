@@ -3,6 +3,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:private_memo/editor/edit_navigator_bar.dart';
 import 'package:private_memo/editor/hidden_ranges.dart';
 import 'package:private_memo/editor/private_editor.dart';
 import 'package:private_memo/editor/private_text_controller.dart';
@@ -42,12 +43,12 @@ void main() {
 
     await tester.tap(find.text('보기'));
     await tester.pumpAndSettle();
-    expect(c.revealedRange, r(3, 5));
+    expect(c.revealedRanges, {r(3, 5)});
 
     // 다른 곳을 누르면 다시 가려진다
     await tester.tapAt(charCenter(tester, 0));
     await tester.pump();
-    expect(c.revealedRange, isNull);
+    expect(c.revealedRanges, isEmpty);
   });
 
   testWidgets('박스 수정 메뉴', (tester) async {
@@ -120,11 +121,78 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('수정'), findsOneWidget);
       expect(find.text('보기'), findsOneWidget);
+      expect(find.text('해제'), findsOneWidget);
       await tester.tap(find.text('보기'));
       await tester.pumpAndSettle();
-      expect(c.revealedRange, r(3, 5));
+      expect(c.revealedRanges, {r(3, 5)});
     } finally {
       debugDefaultTargetPlatformOverride = null;
     }
+  });
+
+  testWidgets('일반 어절과 박스가 섞인 선택: 수정·보기·해제·프라이빗 + 기본 메뉴', (tester) async {
+    await pumpEditor(tester);
+    await tester.showKeyboard(find.byType(TextField));
+    final state = tester.state<EditableTextState>(find.byType(EditableText));
+    c.selection = const TextSelection(baseOffset: 0, extentOffset: 5);
+    await tester.pump();
+    state.showToolbar();
+    await tester.pumpAndSettle();
+    expect(find.text('수정'), findsOneWidget);
+    // 안드로이드 툴바는 칸이 모자라면 나머지를 ⋮ 더보기로 보낸다.
+    final more = find.byType(IconButton);
+    if (more.evaluate().isNotEmpty) {
+      await tester.tap(more.last);
+      await tester.pumpAndSettle();
+    }
+    for (final label in ['보기', '해제', '프라이빗', 'Copy']) {
+      expect(find.text(label), findsOneWidget, reason: label);
+    }
+
+    await tester.tap(find.text('해제'));
+    await tester.pumpAndSettle();
+    expect(c.hidden, isEmpty);
+  });
+
+  testWidgets('프라이빗 모드에서는 해제·프라이빗 메뉴가 없다', (tester) async {
+    await pumpEditor(tester);
+    c.privateMode = true;
+    await tester.longPressAt(charCenter(tester, 3));
+    await tester.pumpAndSettle();
+    expect(find.text('수정'), findsOneWidget);
+    expect(find.text('보기'), findsOneWidget);
+    expect(find.text('해제'), findsNothing);
+    expect(find.text('프라이빗'), findsNothing);
+  });
+
+  testWidgets('수정 모드 바: 이동, ✕로 닫으면 바가 사라진다', (tester) async {
+    c = PrivateTextController(text: 'a b c', hidden: [r(0, 1), r(4, 5)]);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [
+              Expanded(child: PrivateEditor(controller: c)),
+              EditNavigatorBar(controller: c),
+            ],
+          ),
+        ),
+      ),
+    );
+    expect(find.byKey(const Key('editNavigatorBar')), findsNothing);
+
+    c.startEditing(r(0, 1));
+    await tester.pump();
+    expect(find.text('1/2'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('editNextButton')));
+    await tester.pump();
+    expect(c.editingRange, r(4, 5));
+    expect(find.text('2/2'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('editCloseButton')));
+    await tester.pump();
+    expect(c.isEditingBox, isFalse);
+    expect(find.byKey(const Key('editNavigatorBar')), findsNothing);
   });
 }

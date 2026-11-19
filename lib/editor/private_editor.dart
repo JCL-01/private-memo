@@ -2,7 +2,6 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
-import 'hidden_ranges.dart';
 import 'private_text_controller.dart';
 
 class UndoEditIntent extends Intent {
@@ -64,62 +63,48 @@ class _PrivateEditorState extends State<PrivateEditor> {
     }
   }
 
-  /// 길게 누르기·우클릭한 지점의 박스.
-  HiddenRange? _pressedBox(EditableTextState state) {
+  /// 길게 누르기·우클릭한 지점의 본문 오프셋.
+  int? _pressedOffset(EditableTextState state) {
     final at = _pointerDownAt;
     if (at == null || _pointerMoved) return null;
-    final offset = state.renderEditable.getPositionForPoint(at).offset;
-    final box = _c.boxAt(offset);
-    if (box == null) return null;
-    final sel = state.textEditingValue.selection;
-    final selectionIsOnBox =
-        !sel.isValid ||
-        sel.isCollapsed ||
-        (sel.start >= box.start && sel.end <= box.end);
-    return selectionIsOnBox ? box : null;
+    return state.renderEditable.getPositionForPoint(at).offset;
   }
 
   Widget _buildContextMenu(BuildContext context, EditableTextState state) {
-    final box = _pressedBox(state);
-    final List<ContextMenuButtonItem> items;
-    if (box != null) {
-      items = [
+    final boxes = _c.boxesForMenu(pressedOffset: _pressedOffset(state));
+    final private = _c.privateMode;
+
+    void run(VoidCallback action) {
+      state.hideToolbar();
+      action();
+    }
+
+    final items = <ContextMenuButtonItem>[
+      // 박스가 걸쳐 있으면: 수정 · 보기 · 해제(일반 모드만) (F4-1)
+      if (boxes.isNotEmpty) ...[
         ContextMenuButtonItem(
           label: '수정',
-          onPressed: () {
-            state.hideToolbar();
-            _c.startEditing(box);
-          },
+          onPressed: () => run(() => _c.startEditing(boxes.first)),
         ),
         ContextMenuButtonItem(
           label: '보기',
-          onPressed: () {
-            state.hideToolbar();
-            _c.reveal(box);
-          },
+          onPressed: () => run(() => _c.reveal(boxes)),
         ),
-      ];
-    } else {
-      items = [
-        ...state.contextMenuButtonItems,
-        if (_c.selectionCanHide)
-          ContextMenuButtonItem(
-            label: '프라이빗',
-            onPressed: () {
-              state.hideToolbar();
-              _c.hideSelection();
-            },
-          ),
-        if (_c.selectionCanUnhide)
+        if (!private)
           ContextMenuButtonItem(
             label: '해제',
-            onPressed: () {
-              state.hideToolbar();
-              _c.unhideSelection();
-            },
+            onPressed: () => run(() => _c.unhideBoxes(boxes)),
           ),
-      ];
-    }
+      ],
+      // 가리지 않은 어절이 선택에 있으면: 프라이빗(일반 모드만) (F3-1)
+      if (!private && _c.selectionCanHide)
+        ContextMenuButtonItem(
+          label: '프라이빗',
+          onPressed: () => run(_c.hideSelection),
+        ),
+      // 복사·잘라내기·붙여넣기 등 기본 메뉴 (F3-6)
+      ...state.contextMenuButtonItems,
+    ];
     return AdaptiveTextSelectionToolbar.buttonItems(
       anchors: state.contextMenuAnchors,
       buttonItems: items,

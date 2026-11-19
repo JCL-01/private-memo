@@ -99,7 +99,7 @@ void main() {
   group('보기 (F4-4)', () {
     test('보기로 연 박스는 다른 곳을 누르면 다시 가려진다', () {
       final c = make();
-      c.reveal(r(3, 5));
+      c.reveal([r(3, 5)]);
       expect(c.isBoxed(r(3, 5)), isFalse);
       userSelect(c, 0);
       expect(c.isBoxed(r(3, 5)), isTrue);
@@ -107,14 +107,14 @@ void main() {
 
     test('dismissReveal', () {
       final c = make();
-      c.reveal(r(3, 5));
+      c.reveal([r(3, 5)]);
       c.dismissReveal();
-      expect(c.revealedRange, isNull);
+      expect(c.revealedRanges, isEmpty);
     });
 
     test('보기는 되돌리기 대상이 아니다 (F5-4)', () {
       final c = make();
-      c.reveal(r(3, 5));
+      c.reveal([r(3, 5)]);
       expect(c.canUndo, isFalse);
     });
   });
@@ -128,5 +128,74 @@ void main() {
     expect(c.text, '오늘 비밀 회의');
     expect(c.hidden, [r(3, 5)]);
     expect(c.selection.baseOffset, 0);
+  });
+
+  group('수정 모드 이동 (F4-2)', () {
+    // 'a b c d' 에서 a, c, d 가린 상태
+    PrivateTextController make3() => PrivateTextController(
+      text: 'a b c d',
+      hidden: [r(0, 1), r(4, 5), r(6, 7)],
+    );
+
+    test('다음/이전 박스로 이동하고 ✕로 빠져나온다', () {
+      final c = make3();
+      c.startEditing(r(0, 1));
+      expect(c.editingIndex, 0);
+      c.moveEditing(1);
+      expect(c.editingRange, r(4, 5));
+      expect(c.isBoxed(r(0, 1)), isTrue);
+      c.moveEditing(1);
+      expect(c.editingRange, r(6, 7));
+      c.moveEditing(1); // 마지막에서는 그대로
+      expect(c.editingRange, r(6, 7));
+      c.moveEditing(-1);
+      expect(c.editingRange, r(4, 5));
+      c.stopEditing();
+      expect(c.isEditingBox, isFalse);
+      expect(c.isBoxed(r(4, 5)), isTrue);
+    });
+  });
+
+  group('메뉴 대상 박스 (F4-1)', () {
+    test('선택에 일부라도 걸친 박스 전부', () {
+      final c = PrivateTextController(
+        text: 'a bb cc d',
+        hidden: [r(2, 4), r(5, 7)],
+      );
+      c.selection = const TextSelection(baseOffset: 3, extentOffset: 6);
+      expect(c.boxesForMenu(), [r(2, 4), r(5, 7)]);
+      c.selection = const TextSelection(baseOffset: 0, extentOffset: 1);
+      expect(c.boxesForMenu(), isEmpty);
+    });
+
+    test('선택이 없으면 누른 위치의 박스', () {
+      final c = make();
+      c.selection = const TextSelection.collapsed(offset: 0);
+      expect(c.boxesForMenu(pressedOffset: 4), [r(3, 5)]);
+      expect(c.boxesForMenu(pressedOffset: 0), isEmpty);
+    });
+
+    test('보기는 여러 박스를 한꺼번에 연다', () {
+      final c = PrivateTextController(
+        text: 'a bb cc d',
+        hidden: [r(2, 4), r(5, 7)],
+      );
+      c.reveal([r(2, 4), r(5, 7)]);
+      expect(c.isBoxed(r(2, 4)), isFalse);
+      expect(c.isBoxed(r(5, 7)), isFalse);
+      c.dismissReveal();
+      expect(c.isBoxed(r(2, 4)), isTrue);
+    });
+
+    test('해제는 지정한 박스만 풀고 되돌릴 수 있다', () {
+      final c = PrivateTextController(
+        text: 'a bb cc d',
+        hidden: [r(2, 4), r(5, 7)],
+      );
+      c.unhideBoxes([r(2, 4)]);
+      expect(c.hidden, [r(5, 7)]);
+      c.undo();
+      expect(c.hidden, [r(2, 4), r(5, 7)]);
+    });
   });
 }

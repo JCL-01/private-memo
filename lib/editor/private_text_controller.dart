@@ -19,19 +19,30 @@ class PrivateTextController extends TextEditingController {
   /// `수정` 중인 어절. 커서가 이 어절을 벗어나면 다시 박스가 된다. (F4-2)
   HiddenRange? _editing;
 
-  /// `보기`로 잠시 연 어절. 저장하지 않는다. (F4-4, F4-5)
-  HiddenRange? _revealed;
+  /// `보기`로 잠시 연 어절들. 저장하지 않는다. (F4-4, F4-5)
+  Set<HiddenRange> _revealed = {};
+
+  /// 프라이빗 모드 여부. 켜져 있으면 박스 메뉴에 `해제`·`프라이빗`이 없다. (F2)
+  bool privateMode = false;
 
   bool _internal = false;
 
   List<HiddenRange> get hidden => List.unmodifiable(_hidden);
   HiddenRange? get editingRange => _editing;
-  HiddenRange? get revealedRange => _revealed;
+  Set<HiddenRange> get revealedRanges => Set.unmodifiable(_revealed);
+
+  /// 수정 모드 여부. 켜져 있으면 이전/다음/닫기 바를 보여 준다. (F4-2)
+  bool get isEditingBox => _editing != null;
+
+  /// 수정 중인 박스가 문서의 박스 중 몇 번째인지(0부터). 수정 중이 아니면 -1.
+  int get editingIndex => _editing == null ? -1 : _hidden.indexOf(_editing!);
+
+  int get boxCount => _hidden.length;
   bool get canUndo => _history.canUndo;
   bool get canRedo => _history.canRedo;
 
   /// 지금 박스로 그려지는 범위인지(수정 중·보기 중이면 아님).
-  bool isBoxed(HiddenRange r) => r != _editing && r != _revealed;
+  bool isBoxed(HiddenRange r) => r != _editing && !_revealed.contains(r);
 
   /// 커서 오프셋 [offset]에 걸친, 지금 박스로 보이는 범위.
   HiddenRange? boxAt(int offset) {
@@ -79,7 +90,7 @@ class PrivateTextController extends TextEditingController {
 
     _history.recordEdit(EditorSnapshot(old.text, old.selection, _hidden), edit);
     _hidden = applyEdit(_hidden, edit, hideInserted: inEditingWord);
-    _revealed = null;
+    _revealed = {};
 
     if (inEditingWord) {
       // 나뉜 어절 중 커서가 있는 쪽을 계속 수정한다.
@@ -94,7 +105,7 @@ class PrivateTextController extends TextEditingController {
     var value = next;
     final sel = next.selection;
     // IME 동기화처럼 커서가 그대로인 값 갱신에서는 `보기`를 유지한다.
-    if (sel != old.selection) _revealed = null;
+    if (sel != old.selection) _revealed = {};
 
     final editing = _editing;
     if (editing != null) {
@@ -169,7 +180,7 @@ class PrivateTextController extends TextEditingController {
     _history.recordAction(_snapshot);
     _hidden = next;
     _editing = null;
-    _revealed = null;
+    _revealed = {};
     // 선택을 끝으로 접는다. 끝이 박스 안이면 박스 뒤로.
     var end = sel.end;
     for (final r in _hidden) {
@@ -187,7 +198,7 @@ class PrivateTextController extends TextEditingController {
   void startEditing(HiddenRange box) {
     _history.breakGroup();
     _editing = box;
-    _revealed = null;
+    _revealed = {};
     _setInternal(
       value.copyWith(
         selection: TextSelection.collapsed(offset: box.end),
@@ -196,22 +207,64 @@ class PrivateTextController extends TextEditingController {
     );
   }
 
-  /// `보기`: 박스 어절을 잠시 연다. (F4-4)
-  void reveal(HiddenRange box) {
+  /// `보기`: 박스 어절들을 잠시 연다. (F4-4)
+  void reveal(List<HiddenRange> boxes) {
+    if (boxes.isEmpty) return;
     _editing = null;
-    _revealed = box;
+    _revealed = boxes.toSet();
     _setInternal(
       value.copyWith(
-        selection: TextSelection.collapsed(offset: box.end),
+        selection: TextSelection.collapsed(offset: boxes.last.end),
         composing: TextRange.empty,
       ),
     );
+  }
+
+  /// 수정 모드에서 이전(-1)/다음(+1) 박스로 이동한다. (F4-2)
+  void moveEditing(int step) {
+    final i = editingIndex;
+    if (i < 0) return;
+    final next = i + step;
+    if (next < 0 || next >= _hidden.length) return;
+    startEditing(_hidden[next]);
+  }
+
+  /// 수정 모드에서 빠져나온다(✕). 어절은 다시 박스가 된다.
+  void stopEditing() {
+    if (_editing == null) return;
+    _editing = null;
+    _history.breakGroup();
+    notifyListeners();
+  }
+
+  /// 메뉴 대상 박스: 선택에 일부라도 걸친 박스들.
+  /// 선택이 없으면(우클릭 등) [pressedOffset] 위치의 박스. (F4-1)
+  List<HiddenRange> boxesForMenu({int? pressedOffset}) {
+    final sel = selection;
+    if (sel.isValid && !sel.isCollapsed) {
+      return _hidden
+          .where((r) => isBoxed(r) && r.overlaps(sel.start, sel.end))
+          .toList();
+    }
+    if (pressedOffset == null) return const [];
+    final box = boxAt(pressedOffset);
+    return box == null ? const [] : [box];
+  }
+
+  /// `해제`: 지정한 박스들의 가린 범위를 푼다. (F3-3)
+  void unhideBoxes(List<HiddenRange> boxes) {
+    if (boxes.isEmpty) return;
+    final remove = boxes.toSet();
+    final sel = selection.isValid && !selection.isCollapsed
+        ? selection
+        : TextSelection.collapsed(offset: boxes.last.end);
+    _applyAction(_hidden.where((r) => !remove.contains(r)).toList(), sel);
   }
 
   /// 화면 아무 곳이나 누르면 `보기`로 연 박스를 다시 가린다. (F4-4)
   void dismissReveal() {
-    if (_revealed == null) return;
-    _revealed = null;
+    if (_revealed.isEmpty) return;
+    _revealed = {};
     notifyListeners();
   }
 
@@ -223,7 +276,7 @@ class PrivateTextController extends TextEditingController {
     if (s == null) return;
     _hidden = s.hidden;
     _editing = null;
-    _revealed = null;
+    _revealed = {};
     final selection = s.selection.isValid
         ? s.selection
         : TextSelection.collapsed(offset: s.text.length);

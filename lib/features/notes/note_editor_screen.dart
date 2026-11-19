@@ -6,6 +6,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../data/note.dart';
 import '../../data/notes_repository.dart';
 import '../../data/providers.dart';
+import '../../editor/edit_navigator_bar.dart';
 import '../../editor/hidden_ranges.dart';
 import '../../editor/private_editor.dart';
 import '../../editor/private_text_controller.dart';
@@ -145,14 +146,21 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
       ),
       body: c == null
           ? const Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: PrivateEditor(
-                controller: c,
-                focusNode: _focusNode,
-                style: Theme.of(context).textTheme.bodyLarge
-                    ?.copyWith(fontSize: 17, height: 1.5),
-              ),
+          : Column(
+              children: [
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: PrivateEditor(
+                      controller: c,
+                      focusNode: _focusNode,
+                      style: Theme.of(context).textTheme.bodyLarge
+                          ?.copyWith(fontSize: 17, height: 1.5),
+                    ),
+                  ),
+                ),
+                EditNavigatorBar(controller: c),
+              ],
             ),
     );
   }
