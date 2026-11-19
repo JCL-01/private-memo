@@ -1,7 +1,10 @@
 import 'package:flutter/gestures.dart';
+import 'package:flutter/rendering.dart' show RenderEditable;
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
+import 'box_colors.dart';
+import 'box_painter.dart';
 import 'private_text_controller.dart';
 
 class UndoEditIntent extends Intent {
@@ -38,6 +41,36 @@ class _PrivateEditorState extends State<PrivateEditor> {
   bool _pointerMoved = false;
 
   PrivateTextController get _c => widget.controller;
+
+  final _fieldKey = GlobalKey();
+  final _paintKey = GlobalKey();
+  final _scroll = ScrollController();
+  EditableTextState? _editable;
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  /// TextField 안의 EditableTextState(박스 위치 계산용).
+  RenderEditable? _findEditable() {
+    final cached = _editable;
+    if (cached != null && cached.mounted) return cached.renderEditable;
+    EditableTextState? found;
+    void visit(Element e) {
+      if (found != null) return;
+      if (e is StatefulElement && e.state is EditableTextState) {
+        found = e.state as EditableTextState;
+        return;
+      }
+      e.visitChildElements(visit);
+    }
+
+    _fieldKey.currentContext?.visitChildElements(visit);
+    _editable = found;
+    return found?.renderEditable;
+  }
 
   static const _shortcuts = <ShortcutActivator, Intent>{
     SingleActivator(LogicalKeyboardKey.keyZ, control: true): UndoEditIntent(),
@@ -139,22 +172,47 @@ class _PrivateEditorState extends State<PrivateEditor> {
         child: Listener(
           onPointerDown: _onPointerDown,
           onPointerMove: _onPointerMove,
-          child: TextField(
-            key: const Key('noteEditor'),
-            controller: _c,
-            focusNode: widget.focusNode,
-            maxLines: null,
-            expands: true,
-            keyboardType: TextInputType.multiline,
-            textAlignVertical: TextAlignVertical.top,
-            style: widget.style,
-            contextMenuBuilder: _buildContextMenu,
-            decoration: const InputDecoration(
-              border: InputBorder.none,
-              hintText: '메모를 입력하세요',
-            ),
+          child: Stack(
+            children: [
+              // 박스는 글자 뒤에 같은 높이로 따로 그린다.
+              Positioned.fill(
+                child: CustomPaint(
+                  key: _paintKey,
+                  painter: HiddenBoxPainter(
+                    controller: _c,
+                    findEditable: _findEditable,
+                    selfBox: () =>
+                        _paintKey.currentContext?.findRenderObject()
+                            as RenderBox?,
+                    boxColor: boxColorOf(context),
+                    boxHeight: (widget.style?.fontSize ?? 16) * 0.95,
+                    repaint: _scroll,
+                  ),
+                ),
+              ),
+              KeyedSubtree(key: _fieldKey, child: _buildField()),
+            ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildField() {
+    return TextField(
+      scrollController: _scroll,
+      key: const Key('noteEditor'),
+      controller: _c,
+      focusNode: widget.focusNode,
+      maxLines: null,
+      expands: true,
+      keyboardType: TextInputType.multiline,
+      textAlignVertical: TextAlignVertical.top,
+      style: widget.style,
+      contextMenuBuilder: _buildContextMenu,
+      decoration: const InputDecoration(
+        border: InputBorder.none,
+        hintText: '메모를 입력하세요',
       ),
     );
   }

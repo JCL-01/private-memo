@@ -92,17 +92,21 @@ void main() {
     expect(c.hidden, [r(0, 2), r(3, 5)]);
   });
 
-  testWidgets('박스는 투명 글자 + 회색 배경으로 그린다', (tester) async {
+  testWidgets('박스 글자는 투명하게 그리고, 수정 중인 어절은 파란색', (tester) async {
     await pumpEditor(tester);
-    final span = c.buildTextSpan(
+    TextSpan build() => c.buildTextSpan(
       context: tester.element(find.byType(TextField)),
       withComposing: false,
     );
-    final boxed = (span.children!.cast<TextSpan>())
-        .where((s) => s.style?.decoration == TextDecoration.lineThrough)
-        .toList();
+    var spans = build().children!.cast<TextSpan>();
+    final boxed = spans.where((s) => s.style?.color?.a == 0).toList();
     expect(boxed.map((s) => s.text), ['비밀']);
-    expect(boxed.single.style!.color!.a, 0);
+    expect(c.boxes, [r(3, 5)]);
+
+    c.startEditing([r(3, 5)]);
+    spans = build().children!.cast<TextSpan>();
+    final blue = spans.firstWhere((s) => s.text == '비밀');
+    expect(blue.style!.color!.b, greaterThan(blue.style!.color!.r));
   });
 
   testWidgets('윈도우: 박스 우클릭 → 수정/보기, 박스 클릭 → 박스 앞/뒤에 커서', (tester) async {

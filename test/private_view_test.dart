@@ -12,6 +12,7 @@ String summary(String text, ShadeMap map) {
       Shade.near => 'n',
       Shade.far => 'f',
       Shade.box => 'B',
+      Shade.focus => 'F',
     };
   }).join();
 }
@@ -46,9 +47,10 @@ void main() {
     expect(map[1], Shade.normal);
   });
 
-  test('수정 중·보기 중인 어절은 박스가 아니다', () {
+  test('수정 중·보기 중인 어절은 박스가 아니라 파란색이다 (F4-8)', () {
     final map = privateShades(text, text.length, [r(0, 2)]);
-    expect(map[0], Shade.normal);
+    expect(map[0], Shade.focus);
+    expect(normalShades(text, [r(0, 2)], [r(0, 2)])[0], Shade.focus);
   });
 
   test('일반 모드: 가린 범위만 박스', () {

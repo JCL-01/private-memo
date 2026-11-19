@@ -6,7 +6,7 @@ import '../../data/note.dart';
 import '../../data/providers.dart';
 import '../../editor/box_colors.dart';
 import '../../editor/hidden_ranges.dart';
-import '../../editor/private_text_controller.dart';
+import '../../editor/masked_text.dart';
 import 'date_label.dart';
 import 'note_editor_screen.dart';
 
@@ -116,8 +116,15 @@ class _NoteTile extends ConsumerWidget {
     final previewLine = note.previewLine;
 
     // 목록에서도 가린 부분은 박스로 보인다. (F1-7)
+    final baseStyle = DefaultTextStyle.of(context).style
+        .merge(theme.textTheme.bodyLarge);
     List<InlineSpan> masked(String text, List<HiddenRange> boxes) =>
-        buildMaskedSpans(text: text, boxes: boxes, boxColor: boxColor);
+        maskedSpans(
+          text: text,
+          boxes: boxes,
+          boxColor: boxColor,
+          style: baseStyle,
+        );
 
     return Dismissible(
       key: ValueKey(note.id),
