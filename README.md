@@ -2,7 +2,7 @@
 
 옆 사람이 보면 안 되는 내용을 적는 메모 앱. Flutter로 만들며 Android와 Windows를 먼저 지원한다.
 
-기능 명세: [docs/SPEC.md](docs/SPEC.md)
+제품 요구사항(PRD): [docs/PRD.md](docs/PRD.md)
 
 ## 기술 스택
 - Flutter (Dart), Material
@@ -52,5 +52,5 @@ lib/
   data/                     DB, 저장소, Riverpod provider
   features/notes/           메모 목록·편집 화면
 test/                       단위·위젯 테스트
-docs/SPEC.md                기능 명세
+docs/PRD.md                 제품 요구사항(PRD)
 ```
