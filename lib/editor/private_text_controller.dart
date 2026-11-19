@@ -46,6 +46,9 @@ class PrivateTextController extends TextEditingController {
   /// 가장 최근에 수정·추가한 위치. (F2-6 `최근`)
   int? _lastEditOffset;
 
+  /// 프라이빗 모드에서 수정 모드에 들어가기 전 커서 위치. ✕로 나오면 여기로 돌아간다.
+  int? _returnOffset;
+
   bool _internal = false;
 
   // ───────────────────────── 상태 조회 ─────────────────────────
@@ -68,6 +71,14 @@ class PrivateTextController extends TextEditingController {
 
   /// 프라이빗 모드의 현재 어절 기준점.
   int get anchor => _anchor;
+
+  /// 프라이빗 모드의 현재 어절(커서가 붙어 있는 어절). 공백 위면 null.
+  HiddenRange? get currentWord {
+    for (final w in wordsOverlapping(text, _anchor, _anchor)) {
+      return w;
+    }
+    return null;
+  }
 
   /// 지금 수정 중인 어절(보이는 상태). 수정 모드가 아니면 null.
   HiddenRange? get editingRange =>
@@ -159,6 +170,10 @@ class PrivateTextController extends TextEditingController {
     _revealed = {};
     final end = cursor ?? edit.start + edit.inserted.length;
     _remapTargets(edit, inEditingWord, end);
+    final ret = _returnOffset;
+    if (ret != null && ret > edit.start) {
+      _returnOffset = ret >= edit.oldEnd ? ret + edit.delta : edit.start;
+    }
     _lastEditOffset = end;
     _anchor = end;
     _holdAnchor = false;
@@ -171,7 +186,27 @@ class PrivateTextController extends TextEditingController {
     // IME 동기화처럼 커서가 그대로인 값 갱신에서는 `보기`를 유지한다.
     if (sel != old.selection) _revealed = {};
 
-    // 박스를 짧게 누르거나 방향키로 들어오면 박스 앞/뒤로 보낸다. (F4-6)
+    // 프라이빗 모드: 클릭·터치로는 커서와 현재 어절이 바뀌지 않는다.
+    // 현재 어절 안에서의 이동(방향키 등)만 허용한다. 현재 어절은 `수정`·`최근`·`마지막`으로만 바꾼다. (F2-10)
+    if (_privateMode) {
+      if (sel.isValid && sel.isCollapsed && next.composing.isCollapsed) {
+        final off = sel.baseOffset;
+        final current = currentWord;
+        if (current != null && off >= current.start && off <= current.end) {
+          _anchor = off;
+        } else if (off != _anchor) {
+          value = next.copyWith(
+            selection: TextSelection.collapsed(
+              offset: _anchor.clamp(0, text.length),
+            ),
+          );
+        }
+      }
+      _setInternal(value);
+      return;
+    }
+
+    // 일반 모드: 박스를 짧게 누르거나 방향키로 들어오면 박스 앞/뒤로 보낸다. (F4-6)
     if (sel.isValid && sel.isCollapsed && next.composing.isCollapsed) {
       final off = sel.baseOffset;
       final box = boxes.where((b) => b.strictlyContains(off)).firstOrNull;
@@ -336,6 +371,7 @@ class PrivateTextController extends TextEditingController {
   void startEditing(List<HiddenRange> targets) {
     if (targets.isEmpty) return;
     _history.breakGroup();
+    if (_privateMode && _targets.isEmpty) _returnOffset = _anchor;
     _setTargets(List.of(targets), 0);
     _revealed = {};
     _moveCursorTo(editingRange!.end);
@@ -356,7 +392,14 @@ class PrivateTextController extends TextEditingController {
     if (_targets.isEmpty) return;
     _setTargets([], 0);
     _history.breakGroup();
-    notifyListeners();
+    final ret = _returnOffset;
+    _returnOffset = null;
+    if (_privateMode && ret != null) {
+      // 프라이빗 모드: 수정 전에 쓰던 자리로 돌아간다.
+      _moveCursorTo(ret.clamp(0, text.length));
+    } else {
+      notifyListeners();
+    }
   }
 
   /// `보기`: 박스들을 잠시 연다. 현재 어절과 커서는 그대로. (F4-4)
@@ -448,7 +491,7 @@ class PrivateTextController extends TextEditingController {
         palette: ShadePalette(
           box: boxColorOf(context),
           near: textColor.withValues(alpha: 0.5),
-          far: textColor.withValues(alpha: 0.25),
+          focus: focusColorOf(context),
         ),
         composing: withComposing && value.isComposingRangeValid
             ? value.composing
@@ -458,16 +501,15 @@ class PrivateTextController extends TextEditingController {
   }
 }
 
-/// 박스 막대 두께(글꼴 기본 취소선 두께의 배수).
-const double boxThickness = 14;
-
 /// 회색 단계와 박스 색.
 class ShadePalette {
-  const ShadePalette({required this.box, this.near, this.far});
+  const ShadePalette({required this.box, this.near, this.focus});
 
   final Color box;
   final Color? near;
-  final Color? far;
+
+  /// `수정`·`보기`로 잠시 열린 어절 색(파란색). (F4-8)
+  final Color? focus;
 }
 
 /// [shades]에 따라 글자를 그린다.
@@ -479,19 +521,14 @@ List<InlineSpan> buildShadedSpans({
   TextRange? composing,
 }) {
   if (text.isEmpty) return const [];
-  // 배경색은 줄 높이 전체를 칠해 위아래 줄 박스가 붙어 보이므로,
-  // 글자를 투명하게 하고 굵은 취소선으로 글자 높이만큼의 막대를 그린다.
-  final boxStyle = TextStyle(
-    color: const Color(0x00000000),
-    decoration: TextDecoration.lineThrough,
-    decorationColor: palette.box,
-    decorationThickness: boxThickness,
-  );
+  // 박스 글자는 투명하게만 한다. 회색 박스 자체는 HiddenBoxPainter가
+  // 같은 높이로 따로 그린다(글꼴마다 두께가 달라지지 않도록).
+  const boxStyle = TextStyle(color: Color(0x00000000));
   TextStyle? styleOf(Shade s) => switch (s) {
     Shade.normal => null,
     Shade.near => TextStyle(color: palette.near),
-    Shade.far => TextStyle(color: palette.far),
     Shade.box => boxStyle,
+    Shade.focus => TextStyle(color: palette.focus),
   };
   const composingStyle = TextStyle(decoration: TextDecoration.underline);
 
@@ -512,17 +549,4 @@ List<InlineSpan> buildShadedSpans({
     spans.add(TextSpan(text: text.substring(start, i), style: style));
   }
   return spans;
-}
-
-/// 목록 미리보기용: [boxes] 범위만 박스로 그린다.
-List<InlineSpan> buildMaskedSpans({
-  required String text,
-  required List<HiddenRange> boxes,
-  required Color boxColor,
-}) {
-  return buildShadedSpans(
-    text: text,
-    shades: normalShades(text, boxes, const []),
-    palette: ShadePalette(box: boxColor),
-  );
 }

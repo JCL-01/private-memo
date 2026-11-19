@@ -26,39 +26,49 @@ void main() {
       PrivateTextController(text: text, hidden: hidden, privateMode: true);
 
   test('드래그로 가린 어절도 현재·앞뒤 어절이면 보인다 (F2-9)', () {
-    final c = make(hidden: [r(18, 20), r(15, 17), r(0, 2)]);
+    final c = make(hidden: [r(18, 20), r(15, 17), r(12, 14), r(0, 2)]);
     userSelect(c, 20);
     expect(c.isBoxed(r(18, 20)), isFalse); // 현재
     expect(c.isBoxed(r(15, 17)), isFalse); // 바로 앞
+    expect(c.isBoxed(r(12, 14)), isTrue); // 두 번째 앞은 박스
     expect(c.isBoxed(r(0, 2)), isTrue);
   });
 
-  test('박스 가운데를 누르면 박스 끝으로 커서가 가고 그 어절이 현재 어절이 된다', () {
+  test('클릭·터치로는 커서와 현재 어절이 바뀌지 않는다 (F2-10)', () {
     final c = make();
     userSelect(c, 20);
+    userSelect(c, 4); // w1 가운데 클릭
+    expect(c.selection.baseOffset, 20);
     expect(c.isBoxed(r(3, 5)), isTrue);
-    userSelect(c, 4); // w1 가운데
-    expect([3, 5], contains(c.selection.baseOffset));
-    expect(c.isBoxed(r(3, 5)), isFalse);
+    userSelect(c, 2); // 어절 사이 공백 클릭
+    expect(c.selection.baseOffset, 20);
   });
 
-  test('범위 선택(길게 누르기) 중에는 현재 어절이 바뀌지 않는다', () {
+  test('현재 어절 안에서는 커서를 옮길 수 있다', () {
     final c = make();
-    userSelect(c, 20);
+    userSelect(c, 19);
+    expect(c.selection.baseOffset, 19);
+    expect(c.anchor, 19);
+  });
+
+  test('범위 선택(길게 누르기)은 되고, 현재 어절은 바뀌지 않는다', () {
+    final c = make();
     userSelect(c, 3, 5);
     expect(c.isBoxed(r(3, 5)), isTrue);
     expect(c.boxesForMenu(), [r(3, 5)]);
+    userSelect(c, 4); // 선택 해제 → 원래 자리로
+    expect(c.selection.baseOffset, 20);
   });
 
-  test('우클릭 중에는 현재 어절이 바뀌지 않는다', () {
+  test('수정으로 현재 어절을 바꾸고, ✕로 원래 자리로 돌아간다', () {
     final c = make();
-    userSelect(c, 20);
-    c.holdAnchor();
-    userSelect(c, 4);
-    expect(c.isBoxed(r(3, 5)), isTrue);
-    c.releaseAnchor();
-    userSelect(c, 3);
+    c.startEditing([r(3, 5)]);
+    expect(c.selection.baseOffset, 5);
     expect(c.isBoxed(r(3, 5)), isFalse);
+    userSet(c, 'w0 w1x w2 w3 w4 w5 w6', 6);
+    c.stopEditing();
+    expect(c.selection.baseOffset, 21); // 원래 끝(20) + 1글자
+    expect(c.isBoxed(r(3, 6)), isTrue);
   });
 
   test('최근: 마지막으로 고친 곳으로, 마지막: 마지막 어절로 (F2-6, F2-7)', () {
