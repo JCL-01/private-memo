@@ -1,0 +1,132 @@
+<title>프라이빗 메모 PRD</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: 문서 한 단 + 넓은 화면에서 왼쪽 목차. 박스 회색과 메모지 노랑을 포인트로. */
+:root {
+  --bg: #fbfaf7;
+  --surface: #ffffff;
+  --fg: #1d1c1a;
+  --muted: #6b6760;
+  --line: #e4e0d8;
+  --accent: #8a6a00;
+  --accent-soft: #f6efd9;
+  --box: #c7c7cc;
+  --font-body: "Noto Sans KR", system-ui, -apple-system, "Malgun Gothic", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161513; --surface: #1e1d1a; --fg: #ecebe7; --muted: #a29d94;
+    --line: #34322e; --accent: #e3c15c; --accent-soft: #2c2716; --box: #5a5a5e;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161513; --surface: #1e1d1a; --fg: #ecebe7; --muted: #a29d94;
+  --line: #34322e; --accent: #e3c15c; --accent-soft: #2c2716; --box: #5a5a5e;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--font-body); font-size: 15.5px; line-height: 1.7;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 64px;
+}
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 48px; }
+@media (max-width: 860px) { .wrap { grid-template-columns: minmax(0, 1fr); gap: 0; } nav.toc { display: none; } }
+header.top { max-width: 1120px; margin: 0 auto; padding-block: 32px 20px; border-bottom: 1px solid var(--line); margin-bottom: 28px; display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: end; justify-content: space-between; }
+.brand { display: flex; align-items: center; gap: 12px; }
+.mark { display: inline-flex; gap: 4px; align-items: center; }
+.mark span { display: block; height: 10px; border-radius: 2px; background: var(--box); }
+.mark span.on { background: var(--fg); }
+header h1 { margin: 0; font-size: 1.6rem; font-weight: 700; letter-spacing: -0.01em; }
+.meta { color: var(--muted); font-size: 0.85rem; font-family: var(--font-mono); display: flex; gap: 14px; flex-wrap: wrap; }
+.meta b { color: var(--fg); font-weight: 500; }
+nav.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 20px); align-self: start; max-height: calc(100vh - 40px); overflow: auto; font-size: 0.86rem; }
+nav.toc .label { text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-size: 0.72rem; margin-bottom: 8px; }
+nav.toc a { display: block; color: var(--muted); text-decoration: none; padding: 4px 0 4px 10px; border-left: 2px solid transparent; }
+nav.toc a.h3 { padding-left: 22px; font-size: 0.82rem; }
+nav.toc a:hover, nav.toc a:focus-visible { color: var(--fg); border-left-color: var(--accent); outline: none; }
+main { min-width: 0; }
+main > :first-child { margin-top: 0; }
+main h1 { display: none; }
+main h2 { font-size: 1.3rem; margin: 2.4em 0 0.6em; padding-top: 0.4em; text-wrap: balance; scroll-margin-top: 16px; }
+main h3 { font-size: 1.05rem; margin: 1.8em 0 0.5em; scroll-margin-top: 16px; }
+main h4 { font-size: 0.98rem; margin: 1.4em 0 0.4em; }
+main p, main li { max-width: 70ch; }
+main hr { border: 0; border-top: 1px solid var(--line); margin: 2.2em 0; }
+main a { color: var(--accent); }
+main code { font-family: var(--font-mono); font-size: 0.88em; background: var(--accent-soft); padding: 0.1em 0.35em; border-radius: 4px; }
+main pre { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); padding: 12px 14px; border-radius: 6px; }
+main pre code { background: none; padding: 0; }
+.table-wrap { overflow-x: auto; margin: 0.8em 0 1.2em; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+tr:last-child td { border-bottom: 0; }
+th { font-weight: 500; color: var(--muted); font-size: 0.8rem; letter-spacing: 0.02em; background: var(--bg); }
+td:first-child { white-space: nowrap; }
+td.req-id { font-family: var(--font-mono); font-size: 0.82rem; color: var(--accent); font-weight: 500; }
+td.status-done { color: var(--muted); }
+.pill { display: inline-block; font-size: 0.78rem; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; }
+.pill.done { background: var(--accent-soft); border-color: transparent; color: var(--accent); }
+.pill.next { background: var(--fg); color: var(--bg); border-color: transparent; }
+.fallback { white-space: pre-wrap; font-family: var(--font-mono); font-size: 0.85rem; }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+
+<header class="top">
+  <div class="brand">
+    <span class="mark" aria-hidden="true"><span style="width:22px"></span><span style="width:14px"></span><span class="on" style="width:30px"></span><span style="width:18px"></span></span>
+    <h1>프라이빗 메모 PRD</h1>
+  </div>
+  <div class="meta">
+    <span>브랜치 <b>__BRANCH__</b></span>
+    <span>커밋 <b>__COMMIT__</b></span>
+    <span>갱신 <b>__UPDATED__</b></span>
+  </div>
+</header>
+<div class="wrap">
+  <nav class="toc" aria-label="목차"><div class="label">목차</div><div id="toc"></div></nav>
+  <main id="doc"><div class="fallback" id="fallback"></div></main>
+</div>
+
+<script type="text/markdown" id="prd-src">__MARKDOWN__</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script>
+(function () {
+  var src = document.getElementById('prd-src').textContent;
+  var doc = document.getElementById('doc');
+  if (!window.marked) { document.getElementById('fallback').textContent = src; return; }
+  doc.innerHTML = marked.parse(src, { gfm: true });
+
+  // 표를 가로 스크롤 상자로 감싸고, 요구사항 ID·단계 상태를 꾸민다.
+  doc.querySelectorAll('table').forEach(function (t) {
+    var w = document.createElement('div'); w.className = 'table-wrap';
+    t.parentNode.insertBefore(w, t); w.appendChild(t);
+    t.querySelectorAll('tbody tr').forEach(function (tr) {
+      var first = tr.cells[0];
+      if (first && /^F\d+(-\d+[a-z]?)?$/.test(first.textContent.trim())) first.classList.add('req-id');
+      Array.prototype.forEach.call(tr.cells, function (td) {
+        var v = td.textContent.trim();
+        if (v === '완료') td.innerHTML = '<span class="pill done">완료</span>';
+        else if (v === '다음') td.innerHTML = '<span class="pill next">다음</span>';
+      });
+    });
+  });
+
+  // 목차
+  var toc = document.getElementById('toc'), n = 0;
+  doc.querySelectorAll('h2, h3').forEach(function (h) {
+    var id = 's' + (++n); h.id = id;
+    var a = document.createElement('a');
+    a.href = '#' + id; a.textContent = h.textContent;
+    if (h.tagName === 'H3') a.className = 'h3';
+    toc.appendChild(a);
+  });
+  if (location.hash) { var el = document.getElementById(location.hash.slice(1)); if (el) el.scrollIntoView(); }
+})();
+</script>
