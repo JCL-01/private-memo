@@ -62,7 +62,6 @@ class WindowsSpellCheckService implements SpellCheckService {
     Locale locale,
     String text,
   ) async {
-    _log('검사 요청 받음 (앱 언어 ${locale.toLanguageTag()})');
     final checker = _ensureChecker(locale);
     if (checker == null) return null;
     final spans = <SuggestionSpan>[];
@@ -97,7 +96,6 @@ class WindowsSpellCheckService implements SpellCheckService {
       _log('검사 중 오류: $e');
       return null;
     } finally {
-      _log('검사: 글자 ${text.length}자, 틀린 곳 ${spans.length}개');
       errors?.release();
       free(out);
       free(p);
@@ -164,7 +162,7 @@ class WindowsSpellCheckService implements SpellCheckService {
     return out;
   }
 
-  /// 개발 중(flutter run) 콘솔에만 찍는 진단 로그.
+  /// 개발 중(flutter run) 콘솔에만 찍는 진단 로그. 처음 검사기를 만들 때만 찍는다.
   void _log(String message) {
     if (kDebugMode) debugPrint('[맞춤법] $message');
   }
