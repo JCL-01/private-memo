@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -11,7 +12,19 @@ import '../../editor/edit_navigator_bar.dart';
 import '../../editor/hidden_ranges.dart';
 import '../../editor/private_editor.dart';
 import '../../editor/private_text_controller.dart';
+import '../../organize/block_box.dart';
+import '../../organize/note_blocks.dart';
+import '../../organize/organizer.dart';
 import '../folders/folder_dialogs.dart';
+
+/// 정리하기·박스 삭제·잘라내기 전후의 문서 상태(되돌리기용). (F8-2e)
+class _DocState {
+  const _DocState(this.blocks, this.text, this.hidden);
+
+  final List<NoteBlock> blocks;
+  final String text;
+  final List<HiddenRange> hidden;
+}
 
 /// 메모 편집 화면.
 ///
@@ -41,6 +54,16 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
   String _folderId = SystemFolders.notes;
   bool get _inTrash => _folderId == SystemFolders.trash;
 
+  /// 정리 기능의 원본·정리본 박스. 본문 위에 놓인다. (F8-2)
+  List<NoteBlock> _blocks = const [];
+  final _docUndo = <_DocState>[];
+  final _docRedo = <_DocState>[];
+  final _docScroll = ScrollController();
+  final _blockKeys = <int, GlobalKey>{};
+  bool _organizing = false;
+
+  bool get _isQuick => _folderId == SystemFolders.quick;
+
   @override
   void initState() {
     super.initState();
@@ -53,6 +76,7 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
     if (!mounted) return;
     _savedContent = note?.content ?? '';
     _folderId = note?.folderId ?? SystemFolders.notes;
+    _blocks = decodeBlocks(note?.blocks ?? '[]');
     final hidden = note?.hidden ?? const <HiddenRange>[];
     final controller = PrivateTextController(
       text: _savedContent,
@@ -63,7 +87,9 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
     controller.addListener(_scheduleSave);
 
     setState(() => _controller = controller);
-    if (_savedContent.isEmpty && !_inTrash) _focusNode.requestFocus();
+    if (_savedContent.isEmpty && _blocks.isEmpty && !_inTrash) {
+      _focusNode.requestFocus();
+    }
   }
 
   bool get _dirty {
@@ -108,7 +134,7 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
   Future<void> _delete() async {
     _saveTimer?.cancel();
     final c = _controller;
-    if (c != null && c.text.trim().isEmpty) {
+    if (c != null && c.text.trim().isEmpty && _blocks.isEmpty) {
       _deleted = true;
       await _repo.delete(widget.noteId);
     } else {
@@ -117,6 +143,144 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
       _deleted = true;
     }
     if (mounted) Navigator.of(context).pop();
+  }
+
+  // ───────────────────────── 정리 (F8-2) ─────────────────────────
+
+  _DocState _docState() {
+    final c = _controller!;
+    return _DocState(List.of(_blocks), c.text, c.hidden);
+  }
+
+  /// 문서 단위 변경(정리하기, 박스 삭제·잘라내기)을 되돌리기 기록에 남기고 적용한다.
+  Future<void> _applyDoc(_DocState next, {bool record = true}) async {
+    final c = _controller!;
+    if (record) {
+      _docUndo.add(_docState());
+      _docRedo.clear();
+    }
+    setState(() => _blocks = next.blocks);
+    if (c.text != next.text ||
+        encodeRanges(c.hidden) != encodeRanges(next.hidden)) {
+      c.resetDocument(next.text, next.hidden);
+    }
+    _saveTimer?.cancel();
+    _savedContent = c.text;
+    _savedHidden = encodeRanges(c.hidden);
+    await _repo.updateContent(
+      widget.noteId,
+      _savedContent,
+      hiddenRanges: _savedHidden,
+    );
+    await _repo.updateBlocks(widget.noteId, encodeBlocks(_blocks));
+  }
+
+  bool get _canUndo => (_controller?.canUndo ?? false) || _docUndo.isNotEmpty;
+  bool get _canRedo => (_controller?.canRedo ?? false) || _docRedo.isNotEmpty;
+
+  /// 되돌리기: 글자 편집이 있으면 그것부터, 없으면 정리하기·박스 변경을 되돌린다.
+  void _undo() {
+    final c = _controller!;
+    if (c.canUndo) {
+      c.undo();
+    } else if (_docUndo.isNotEmpty) {
+      _docRedo.add(_docState());
+      _applyDoc(_docUndo.removeLast(), record: false);
+    }
+    setState(() {});
+  }
+
+  void _redo() {
+    final c = _controller!;
+    if (c.canRedo) {
+      c.redo();
+    } else if (_docRedo.isNotEmpty) {
+      _docUndo.add(_docState());
+      _applyDoc(_docRedo.removeLast(), record: false);
+    }
+    setState(() {});
+  }
+
+  /// `정리`: 지금 쓴 글을 `원본` 박스에 담고, 바로 아래 `정리본` 박스를 만든다. (F8-2a)
+  Future<void> _organize() async {
+    final c = _controller;
+    if (c == null || c.text.trim().isEmpty || _organizing) return;
+    setState(() => _organizing = true);
+    final result = await organizeMemo(c.text);
+    if (!mounted) return;
+    final original = NoteBlock(
+      kind: BlockKind.original,
+      text: c.text,
+      hidden: c.hidden,
+    );
+    final organized = NoteBlock(
+      kind: BlockKind.organized,
+      text: result.toText(),
+      // 원본에 가린 내용이 있으면 정리본 전체를 가린다. (F8-2f)
+      isPrivate: c.hidden.isNotEmpty,
+    );
+    await _applyDoc(_DocState([..._blocks, original, organized], '', const []));
+    if (!mounted) return;
+    setState(() => _organizing = false);
+    // 정리본으로 내려가 초점을 맞춘다. (F8-2c)
+    final key = _blockKeys[_blocks.length - 1];
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = key?.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(
+          ctx,
+          duration: const Duration(milliseconds: 300),
+          alignment: 0.05,
+        );
+      }
+    });
+  }
+
+  Future<void> _deleteBlock(int i) => _applyDoc(
+    _DocState(
+      [..._blocks]..removeAt(i),
+      _controller!.text,
+      _controller!.hidden,
+    ),
+  );
+
+  Future<void> _copyBlock(int i) async {
+    await Clipboard.setData(ClipboardData(text: _blocks[i].text));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('${_blocks[i].label}을 복사했습니다.')));
+  }
+
+  Future<void> _cutBlock(int i) async {
+    await Clipboard.setData(ClipboardData(text: _blocks[i].text));
+    await _deleteBlock(i);
+  }
+
+  /// 정리본 `해제` / `가리기`. (F8-2f)
+  Future<void> _toggleReveal(int i) async {
+    final next = [..._blocks];
+    next[i] = next[i].copyWith(revealed: !next[i].revealed);
+    setState(() => _blocks = next);
+    await _repo.updateBlocks(widget.noteId, encodeBlocks(_blocks));
+  }
+
+  Widget _blockList() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < _blocks.length; i++)
+          BlockBox(
+            key: _blockKeys.putIfAbsent(i, GlobalKey.new),
+            block: _blocks[i],
+            onDelete: () => _deleteBlock(i),
+            onCut: () => _cutBlock(i),
+            onCopy: () => _copyBlock(i),
+            onToggleReveal: _blocks[i].isPrivate
+                ? () => _toggleReveal(i)
+                : null,
+          ),
+      ],
+    );
   }
 
   /// 폴더로 이동. (F1F-4)
@@ -145,7 +309,7 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
     final c = _controller;
     if (!_deleted && c != null && !_inTrash) {
       // 나갈 때: 비어 있으면 삭제, 아니면 마지막 내용 저장
-      if (c.text.trim().isEmpty) {
+      if (c.text.trim().isEmpty && _blocks.isEmpty) {
         _repo.delete(widget.noteId);
       } else if (_dirty) {
         _repo.updateContent(
@@ -157,8 +321,17 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
     }
     c?.dispose();
     _focusNode.dispose();
+    _docScroll.dispose();
     super.dispose();
   }
+
+  Widget _editor(PrivateTextController c) => PrivateEditor(
+    controller: c,
+    focusNode: _focusNode,
+    readOnly: _inTrash,
+    style: Theme.of(context).textTheme.bodyLarge
+        ?.copyWith(fontSize: 17, height: 1.5),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -184,15 +357,27 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                           key: const Key('undoButton'),
                           tooltip: '되돌리기 (Ctrl+Z)',
                           icon: const Icon(Icons.undo),
-                          onPressed: c.canUndo ? c.undo : null,
+                          onPressed: _canUndo ? _undo : null,
                         ),
                         IconButton(
                           key: const Key('redoButton'),
                           tooltip: '다시 실행 (Ctrl+Y)',
                           icon: const Icon(Icons.redo),
-                          onPressed: c.canRedo ? c.redo : null,
+                          onPressed: _canRedo ? _redo : null,
                         ),
                       ],
+                    ),
+                  ),
+                // 빠른 메모 폴더의 메모에만 `정리` 버튼. (F8-2)
+                if (c != null && _isQuick)
+                  ListenableBuilder(
+                    listenable: c,
+                    builder: (context, _) => TextButton(
+                      key: const Key('organizeButton'),
+                      onPressed: c.text.trim().isEmpty || _organizing
+                          ? null
+                          : _organize,
+                      child: Text(_organizing ? '정리 중…' : '정리'),
                     ),
                   ),
                 if (c != null)
@@ -234,16 +419,32 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                     ),
                   ),
                 Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: PrivateEditor(
-                      controller: c,
-                      focusNode: _focusNode,
-                      readOnly: _inTrash,
-                      style: Theme.of(context).textTheme.bodyLarge
-                          ?.copyWith(fontSize: 17, height: 1.5),
-                    ),
-                  ),
+                  child: _blocks.isEmpty
+                      ? Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: _editor(c),
+                        )
+                      // 박스가 있으면 박스들 아래에 이어 쓰는 본문을 둔다.
+                      : LayoutBuilder(
+                          builder: (context, constraints) =>
+                              SingleChildScrollView(
+                                controller: _docScroll,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    _blockList(),
+                                    SizedBox(
+                                      height: constraints.maxHeight * 0.6,
+                                      child: _editor(c),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                        ),
                 ),
                 EditNavigatorBar(controller: c),
                 _PrivateModeBar(

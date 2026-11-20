@@ -565,6 +565,23 @@ class PrivateTextController extends TextEditingController {
     );
   }
 
+  /// 본문을 통째로 바꾼다(정리하기, 정리 되돌리기). 글자 편집 기록은 지운다.
+  void resetDocument(String text, List<HiddenRange> hidden) {
+    _history.clear();
+    _hidden = clampRanges(hidden, text.length);
+    _revealed = {};
+    _setTargets([], 0);
+    _deviceMisspelled = const [];
+    _anchor = text.length;
+    _lastEditOffset = null;
+    _setInternal(
+      TextEditingValue(
+        text: text,
+        selection: TextSelection.collapsed(offset: text.length),
+      ),
+    );
+  }
+
   // ───────────────────────── 되돌리기 ─────────────────────────
 
   void undo() => _restore(_history.undo(_snapshot));

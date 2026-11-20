@@ -31,6 +31,13 @@ class EditorHistory {
   bool get canUndo => _undo.isNotEmpty;
   bool get canRedo => _redo.isNotEmpty;
 
+  /// 기록을 모두 지운다.
+  void clear() {
+    _undo.clear();
+    _redo.clear();
+    breakGroup();
+  }
+
   /// 다음 입력이 반드시 새 묶음이 되도록 한다.
   void breakGroup() {
     _lastKind = null;

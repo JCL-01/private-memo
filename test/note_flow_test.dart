@@ -176,4 +176,54 @@ void main() {
     await settle(tester);
     expect(find.byKey(const Key('privateModeBar')), findsNothing);
   });
+
+  testWidgets('빠른 메모: 정리하면 원본·정리본 박스, 되돌리기로 원래대로 (F8-2)', (tester) async {
+    tester.view.physicalSize = const Size(1200, 2400);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.reset);
+    await pumpApp(tester);
+    await goBack(tester); // 폴더 목록으로
+    await tester.tap(find.byKey(const Key('folder-quick')));
+    await settle(tester);
+    await tester.tap(find.byKey(const Key('newNoteButton')));
+    await settle(tester);
+    expect(find.byKey(const Key('organizeButton')), findsOneWidget);
+    await enterPrivateText(tester, '내일 3시 장보고 오기\n28일 13:30 찬양팀 연습');
+    await settle(tester);
+
+    await tester.tap(find.byKey(const Key('organizeButton')));
+    await settle(tester);
+    expect(find.text('원본'), findsOneWidget);
+    expect(find.text('정리본'), findsOneWidget);
+    expect(find.textContaining('(일정: 28일 13:30)'), findsOneWidget);
+
+    // 저장됨
+    final saved = await tester.runAsync(() => db.select(db.notes).getSingle());
+    expect(saved!.content, '');
+    expect(saved.blocks, contains('organized'));
+
+    // 되돌리기 → 정리 전으로
+    await tester.tap(find.byKey(const Key('undoButton')));
+    await settle(tester);
+    expect(find.text('정리본'), findsNothing);
+    expect(find.textContaining('찬양팀 연습'), findsWidgets);
+
+    // 다시 실행 → 다시 정리된 상태
+    await tester.tap(find.byKey(const Key('redoButton')));
+    await settle(tester);
+    expect(find.text('정리본'), findsOneWidget);
+
+    // 정리본 박스 삭제
+    await tester.tap(find.byKey(const Key('blockDelete-정리본')));
+    await settle(tester);
+    expect(find.text('정리본'), findsNothing);
+    expect(find.text('원본'), findsOneWidget);
+  });
+
+  testWidgets('메모 폴더에는 정리 버튼이 없다', (tester) async {
+    await pumpApp(tester);
+    await tester.tap(find.byKey(const Key('newNoteButton')));
+    await settle(tester);
+    expect(find.byKey(const Key('organizeButton')), findsNothing);
+  });
 }

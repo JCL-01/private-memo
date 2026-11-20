@@ -1,4 +1,5 @@
 import '../editor/hidden_ranges.dart';
+import '../organize/note_blocks.dart';
 import 'database.dart';
 
 /// 목록에 보여 줄 한 줄과 본문 안에서의 시작 위치.
@@ -21,11 +22,22 @@ class NoteLine {
 
 /// 화면에서 쓰는 메모 표시용 헬퍼.
 extension NoteDisplay on Note {
+  /// 목록에 보여 줄 글: 본문이 비어 있으면 첫 박스(정리 원본)의 글. (F8-2)
+  ({String text, List<HiddenRange> hidden}) get _display {
+    if (content.trim().isNotEmpty) {
+      return (text: content, hidden: decodeRanges(hiddenRanges));
+    }
+    final blocks = decodeBlocks(this.blocks);
+    if (blocks.isEmpty) return (text: content, hidden: const []);
+    final b = blocks.first;
+    return (text: b.text, hidden: b.hidden);
+  }
+
   /// 앞뒤 공백을 뺀, 비어 있지 않은 줄들.
   List<NoteLine> get _lines {
     final out = <NoteLine>[];
     var offset = 0;
-    for (final raw in content.split('\n')) {
+    for (final raw in _display.text.split('\n')) {
       final trimmedLeft = raw.trimLeft();
       final text = trimmedLeft.trimRight();
       if (text.isNotEmpty) {
@@ -48,7 +60,11 @@ extension NoteDisplay on Note {
   /// 두 번째 비어 있지 않은 줄(미리보기). 없으면 빈 문자열.
   String get preview => previewLine?.text ?? '';
 
+  /// 본문의 가린 범위.
   List<HiddenRange> get hidden => decodeRanges(hiddenRanges);
 
-  bool get isBlank => content.trim().isEmpty;
+  /// 목록 제목·미리보기에 쓸 가린 범위(본문이 비어 있으면 첫 박스 기준).
+  List<HiddenRange> get displayHidden => _display.hidden;
+
+  bool get isBlank => content.trim().isEmpty && decodeBlocks(blocks).isEmpty;
 }
