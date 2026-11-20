@@ -7,20 +7,22 @@ import 'note_blocks.dart';
 
 /// 원본·정리본 박스. 채팅 답변의 코드 블록처럼 상단 바가 있다. (F8-2a, F8-2b)
 ///
-/// 상단 바: 왼쪽 라벨, 오른쪽에 ✕(삭제) · 가위(잘라내기) · 복사. 정리본이 가려져 있으면 `해제`/`가리기`.
+/// 상단 바: 왼쪽 라벨, 오른쪽에 `선택` · 가위(잘라내기) · 복사. 정리본이 가려져 있으면 `해제`/`가리기`.
 /// 스크롤해서 상단 바가 화면 위로 사라지면 바가 박스 아래쪽으로 내려온다. (F8-2c)
 class BlockBox extends StatefulWidget {
   const BlockBox({
     super.key,
     required this.block,
-    required this.onDelete,
+    required this.onSelect,
     required this.onCut,
     required this.onCopy,
     this.onToggleReveal,
   });
 
   final NoteBlock block;
-  final VoidCallback onDelete;
+
+  /// `선택`: 이 버전만 남기고 박스에서 꺼낸다.
+  final VoidCallback onSelect;
   final VoidCallback onCut;
   final VoidCallback onCopy;
 
@@ -107,12 +109,10 @@ class _BlockBoxState extends State<BlockBox> {
               onPressed: widget.onToggleReveal,
               child: Text(b.revealed ? '가리기' : '해제'),
             ),
-          IconButton(
-            key: Key('blockDelete-${b.label}'),
-            tooltip: '삭제',
-            iconSize: 20,
-            icon: const Icon(Icons.close),
-            onPressed: widget.onDelete,
+          TextButton(
+            key: Key('blockSelect-${b.label}'),
+            onPressed: widget.onSelect,
+            child: const Text('선택'),
           ),
           IconButton(
             key: Key('blockCut-${b.label}'),

@@ -12,7 +12,7 @@ void main() {
               children: [
                 BlockBox(
                   block: block,
-                  onDelete: () {},
+                  onSelect: () {},
                   onCut: () {},
                   onCopy: () {},
                   onToggleReveal: toggle,

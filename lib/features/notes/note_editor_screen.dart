@@ -12,6 +12,7 @@ import '../../editor/edit_navigator_bar.dart';
 import '../../editor/hidden_ranges.dart';
 import '../../editor/private_editor.dart';
 import '../../editor/private_text_controller.dart';
+import '../../editor/private_view.dart';
 import '../../organize/block_box.dart';
 import '../../organize/note_blocks.dart';
 import '../../organize/organizer.dart';
@@ -244,6 +245,43 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
     ),
   );
 
+  /// `선택`: 원본·정리본 중 하나만 남긴다. 짝이 되는 다른 박스는 지우고,
+  /// 선택한 내용은 박스에서 빠져나와 본문이 된다. (F8-2b)
+  Future<void> _selectBlock(int i) async {
+    final c = _controller!;
+    final chosen = _blocks[i];
+    // 정리하기 한 번에 [원본, 정리본] 한 쌍이 생긴다. 고른 박스의 짝을 찾는다.
+    final pairStart = chosen.kind == BlockKind.original ? i : i - 1;
+    final hasPair =
+        pairStart >= 0 &&
+        pairStart + 1 < _blocks.length &&
+        _blocks[pairStart].kind == BlockKind.original &&
+        _blocks[pairStart + 1].kind == BlockKind.organized;
+    final remove = hasPair ? {pairStart, pairStart + 1} : {i};
+    final rest = [
+      for (var k = 0; k < _blocks.length; k++)
+        if (!remove.contains(k)) _blocks[k],
+    ];
+
+    // 고른 내용을 본문 앞에 놓는다. 가린 범위도 함께 옮긴다.
+    // 가려져 있던 정리본은 본문에서도 모든 어절을 가린 채로 둔다(프라이빗 드래그로 해제 가능).
+    final chosenHidden = chosen.isPrivate
+        ? allWords(chosen.text)
+        : chosen.hidden;
+    final rest0 = c.text;
+    final sep = rest0.trim().isEmpty ? '' : '\n';
+    final text = rest0.trim().isEmpty
+        ? chosen.text
+        : '${chosen.text}$sep$rest0';
+    final shift = chosen.text.length + sep.length;
+    final hidden = [
+      ...chosenHidden,
+      if (rest0.trim().isNotEmpty)
+        for (final r in c.hidden) HiddenRange(r.start + shift, r.end + shift),
+    ];
+    await _applyDoc(_DocState(rest, text, hidden));
+  }
+
   Future<void> _copyBlock(int i) async {
     await Clipboard.setData(ClipboardData(text: _blocks[i].text));
     if (!mounted) return;
@@ -272,7 +310,7 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
           BlockBox(
             key: _blockKeys.putIfAbsent(i, GlobalKey.new),
             block: _blocks[i],
-            onDelete: () => _deleteBlock(i),
+            onSelect: () => _selectBlock(i),
             onCut: () => _cutBlock(i),
             onCopy: () => _copyBlock(i),
             onToggleReveal: _blocks[i].isPrivate
