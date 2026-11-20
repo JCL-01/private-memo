@@ -1,6 +1,7 @@
 import 'dart:ffi';
 
 import 'package:ffi/ffi.dart';
+import 'package:flutter/foundation.dart' show debugPrint, kDebugMode;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart' show Locale;
 import 'package:win32/win32.dart';
@@ -26,13 +27,17 @@ class WindowsSpellCheckService implements SpellCheckService {
     _initialized = true;
     try {
       // 이미 초기화되어 있으면 S_FALSE 등이 오지만 그대로 진행한다.
-      CoInitializeEx(COINIT_APARTMENTTHREADED);
+      final hr = CoInitializeEx(COINIT_APARTMENTTHREADED);
+      _log('COM 초기화 결과: 0x${hr.code.toUnsigned(32).toRadixString(16)}');
       final factory = createInstance<ISpellCheckerFactory>(SpellCheckerFactory);
+      _log('윈도우에 설치된 맞춤법 언어: ${_supportedLanguages(factory)}');
       try {
         for (final tag in {'ko-KR', locale.toLanguageTag(), 'en-US'}) {
           final p = tag.toPcwstr();
           try {
-            if (factory.isSupported(p)) {
+            final ok = factory.isSupported(p);
+            _log('$tag 지원: $ok');
+            if (ok) {
               _checker = factory.createSpellChecker(p);
               languageTag = tag;
               break;
@@ -44,9 +49,11 @@ class WindowsSpellCheckService implements SpellCheckService {
       } finally {
         factory.release();
       }
-    } catch (_) {
+    } catch (e) {
+      _log('맞춤법 검사기를 만들지 못함: $e');
       _checker = null;
     }
+    _log('사용하는 언어: ${languageTag ?? '없음(맞춤법 꺼짐)'}');
     return _checker;
   }
 
@@ -55,6 +62,7 @@ class WindowsSpellCheckService implements SpellCheckService {
     Locale locale,
     String text,
   ) async {
+    _log('검사 요청 받음 (앱 언어 ${locale.toLanguageTag()})');
     final checker = _ensureChecker(locale);
     if (checker == null) return null;
     final spans = <SuggestionSpan>[];
@@ -85,9 +93,11 @@ class WindowsSpellCheckService implements SpellCheckService {
           error.release();
         }
       }
-    } catch (_) {
+    } catch (e) {
+      _log('검사 중 오류: $e');
       return null;
     } finally {
+      _log('검사: 글자 ${text.length}자, 틀린 곳 ${spans.length}개');
       errors?.release();
       free(out);
       free(p);
@@ -132,5 +142,30 @@ class WindowsSpellCheckService implements SpellCheckService {
       free(w);
     }
     return out;
+  }
+
+  List<String> _supportedLanguages(ISpellCheckerFactory factory) {
+    final out = <String>[];
+    final item = calloc<Pointer<Utf16>>();
+    IEnumString? list;
+    try {
+      list = factory.supportedLanguages;
+      while (list != null && list.next(1, item, null) == S_OK) {
+        final s = PWSTR(item.value);
+        out.add(s.toDartString());
+        CoTaskMemFree(s);
+      }
+    } catch (e) {
+      out.add('(목록 오류: $e)');
+    } finally {
+      list?.release();
+      free(item);
+    }
+    return out;
+  }
+
+  /// 개발 중(flutter run) 콘솔에만 찍는 진단 로그.
+  void _log(String message) {
+    if (kDebugMode) debugPrint('[맞춤법] $message');
   }
 }
