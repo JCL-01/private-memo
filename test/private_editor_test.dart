@@ -2,6 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'test_helpers.dart';
+
 import 'package:material_ui/material_ui.dart';
 import 'package:private_memo/editor/edit_navigator_bar.dart';
 import 'package:private_memo/editor/hidden_ranges.dart';
@@ -25,7 +28,7 @@ void main() {
 
   /// 본문 [offset] 글자의 화면 위치(가운데).
   Offset charCenter(WidgetTester tester, int offset) {
-    final state = tester.state<EditableTextState>(find.byType(EditableText));
+    final state = tester.state<EditableTextState>(editableFinder);
     final box = state.renderEditable;
     final a = box.getLocalRectForCaret(TextPosition(offset: offset));
     final b = box.getLocalRectForCaret(TextPosition(offset: offset + 1));
@@ -76,7 +79,7 @@ void main() {
 
   testWidgets('Ctrl+Z / Ctrl+Y 로 프라이빗 적용을 되돌리고 다시 실행한다', (tester) async {
     await pumpEditor(tester);
-    await tester.showKeyboard(find.byType(TextField));
+    await showPrivateKeyboard(tester);
     c.selection = const TextSelection(baseOffset: 0, extentOffset: 2);
     c.hideSelection();
     await tester.pump();
@@ -98,7 +101,7 @@ void main() {
   testWidgets('박스 글자는 투명하게 그리고, 수정 중인 어절은 파란색', (tester) async {
     await pumpEditor(tester);
     TextSpan build() => c.buildTextSpan(
-      context: tester.element(find.byType(TextField)),
+      context: tester.element(editableFinder),
       withComposing: false,
     );
     var spans = build().children!.cast<TextSpan>();
@@ -139,8 +142,8 @@ void main() {
 
   testWidgets('일반 어절과 박스가 섞인 선택: 수정·보기·해제·프라이빗 + 기본 메뉴', (tester) async {
     await pumpEditor(tester);
-    await tester.showKeyboard(find.byType(TextField));
-    final state = tester.state<EditableTextState>(find.byType(EditableText));
+    await showPrivateKeyboard(tester);
+    final state = tester.state<EditableTextState>(editableFinder);
     c.selection = const TextSelection(baseOffset: 0, extentOffset: 5);
     await tester.pump();
     state.showToolbar();
@@ -215,7 +218,7 @@ void main() {
 
   testWidgets('Esc 키로 수정 모드에서 빠져나온다', (tester) async {
     await pumpEditor(tester);
-    await tester.showKeyboard(find.byType(TextField));
+    await showPrivateKeyboard(tester);
     c.startEditing([r(3, 5)]);
     await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);

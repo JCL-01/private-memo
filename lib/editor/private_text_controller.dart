@@ -54,30 +54,24 @@ class PrivateTextController extends TextEditingController {
 
   bool _internal = false;
 
-  /// 맞춤법이 틀린 어절(밑줄). 검사기가 채운다. (F2-5, F6-2)
-  List<HiddenRange> _misspelled = const [];
+  /// 기기(안드로이드·iOS) 맞춤법 검사가 틀렸다고 알려 준 범위. 화면을 그릴 때 입력창이 채운다. (F6)
+  List<HiddenRange> _deviceMisspelled = const [];
 
   // ───────────────────────── 상태 조회 ─────────────────────────
 
   List<HiddenRange> get hidden => List.unmodifiable(_hidden);
 
-  /// 맞춤법 밑줄을 그을 범위.
-  List<HiddenRange> get misspelled => _misspelled;
+  /// 기기 맞춤법 밑줄을 그을 범위.
+  List<HiddenRange> get deviceMisspelled => _deviceMisspelled;
 
-  /// 맞춤법 검사 결과를 반영한다.
-  void setMisspelled(List<HiddenRange> ranges) {
-    if (_sameRanges(ranges, _misspelled)) return;
-    _misspelled = List.unmodifiable(ranges);
-    notifyListeners();
+  /// 기기 맞춤법 검사 결과를 받는다. 화면을 그리는 중에 불리므로 알림은 보내지 않는다.
+  void updateDeviceMisspelled(List<HiddenRange> ranges) {
+    _deviceMisspelled = ranges;
   }
 
-  static bool _sameRanges(List<HiddenRange> a, List<HiddenRange> b) {
-    if (a.length != b.length) return false;
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
-    }
-    return true;
-  }
+  /// [offset]이 기기 맞춤법 밑줄 어절 위(경계 포함)인지.
+  bool _onDeviceMisspelled(int offset) =>
+      _deviceMisspelled.any((m) => m.touches(offset));
 
   Set<HiddenRange> get revealedRanges => Set.unmodifiable(_revealed);
   bool get canUndo => _history.canUndo;
@@ -186,17 +180,18 @@ class PrivateTextController extends TextEditingController {
     // 드래그로 가린 어절을 수정할 때만 새 글자도 가린다. (F4-3)
     // 어절을 다 지운 뒤 그 자리에 다시 써도 마찬가지다. (F4-2e)
     final editingHiddenWord = inEditingWord && _targetHidden[_targetIndex];
+    // 기기 맞춤법 대체 단어처럼, 가린 어절 하나를 통째로(또는 일부를) 바꾼 경우에도 계속 가린다.
+    final replacingHiddenWord =
+        edit.deleted > 0 &&
+        !edit.inserted.codeUnits.any(isWhitespaceUnit) &&
+        _hidden.any((h) => edit.start >= h.start && edit.oldEnd <= h.end);
 
     _history.recordEdit(EditorSnapshot(old.text, old.selection, _hidden), edit);
-    _hidden = applyEdit(_hidden, edit, hideInserted: editingHiddenWord);
-    // 고친 어절의 밑줄은 다시 검사할 때까지 지우고, 뒤쪽 밑줄은 위치만 옮긴다.
-    _misspelled = [
-      for (final m in _misspelled)
-        if (m.end < edit.start)
-          m
-        else if (m.start > edit.oldEnd)
-          HiddenRange(m.start + edit.delta, m.end + edit.delta),
-    ];
+    _hidden = applyEdit(
+      _hidden,
+      edit,
+      hideInserted: editingHiddenWord || replacingHiddenWord,
+    );
     _revealed = {};
     final end = cursor ?? edit.start + edit.inserted.length;
     _remapTargets(edit, inEditingWord, end);
@@ -205,8 +200,22 @@ class PrivateTextController extends TextEditingController {
       _returnOffset = ret >= edit.oldEnd ? ret + edit.delta : edit.start;
     }
     _lastEditOffset = end;
-    _anchor = end;
     _holdAnchor = false;
+
+    // 프라이빗 모드에서 현재 어절이 아닌 곳이 바뀐 경우(기기 맞춤법 대체 단어 등):
+    // 현재 어절과 커서는 그대로 두고 위치만 따라간다.
+    final touchesAnchor = _anchor >= edit.start && _anchor <= edit.oldEnd;
+    if (_privateMode && !inEditingWord && !touchesAnchor) {
+      if (_anchor > edit.oldEnd) _anchor += edit.delta;
+      _setInternal(
+        next.copyWith(
+          selection: TextSelection.collapsed(offset: _anchor),
+          composing: TextRange.empty,
+        ),
+      );
+      return;
+    }
+    _anchor = end;
     _setInternal(next);
   }
 
@@ -219,6 +228,17 @@ class PrivateTextController extends TextEditingController {
     if (sel.isValid && sel.isCollapsed) {
       final t = _targets.indexWhere((t) => t.touches(sel.baseOffset));
       if (t >= 0) _targetIndex = t;
+    }
+
+    // 기기 맞춤법 밑줄 어절을 누르면 기기가 대체 단어를 보여 줄 수 있도록
+    // 커서를 그 자리에 그대로 둔다. 박스 앞뒤로 보내거나 되돌리지 않고, 현재 어절도 바꾸지 않는다. (F6-4)
+    if (sel.isValid &&
+        sel.isCollapsed &&
+        next.composing.isCollapsed &&
+        _onDeviceMisspelled(sel.baseOffset) &&
+        !_targets.any((t) => t.touches(sel.baseOffset))) {
+      _setInternal(value);
+      return;
     }
 
     // 프라이빗 모드: 클릭·터치로는 커서와 현재 어절이 바뀌지 않는다.
@@ -552,7 +572,7 @@ class PrivateTextController extends TextEditingController {
     if (s == null) return;
     _hidden = s.hidden;
     _revealed = {};
-    _misspelled = const [];
+    _deviceMisspelled = const [];
     final selection = s.selection.isValid
         ? s.selection
         : TextSelection.collapsed(offset: s.text.length);
@@ -577,6 +597,8 @@ class PrivateTextController extends TextEditingController {
       children: buildShadedSpans(
         text: text,
         shades: shades,
+        misspelled: _deviceMisspelled,
+        misspelledColor: Theme.of(context).colorScheme.error,
         palette: ShadePalette(
           box: boxColorOf(context),
           near: textColor.withValues(alpha: 0.5),
@@ -612,6 +634,8 @@ List<InlineSpan> buildShadedSpans({
   required ShadeMap shades,
   required ShadePalette palette,
   TextRange? composing,
+  List<HiddenRange> misspelled = const [],
+  Color misspelledColor = const Color(0xFFD32F2F),
 }) {
   if (text.isEmpty) return const [];
   // 박스 글자는 투명하게만 한다. 회색 박스 자체는 HiddenBoxPainter가
@@ -628,17 +652,30 @@ List<InlineSpan> buildShadedSpans({
 
   bool inComposing(int i) =>
       composing != null && i >= composing.start && i < composing.end;
+  // 기기 맞춤법 밑줄. 박스 글자는 투명하지만 밑줄은 밑줄 색으로 따로 그려져서
+  // 박스 위에도 그대로 보인다. (F6-5)
+  bool isMisspelled(int i) => misspelled.any((m) => m.covers(i));
+  final misspelledStyle = TextStyle(
+    decoration: TextDecoration.underline,
+    decorationStyle: TextDecorationStyle.wavy,
+    decorationColor: misspelledColor,
+  );
 
   final spans = <InlineSpan>[];
   var i = 0;
   while (i < text.length) {
     final shade = shades[i];
     final comp = inComposing(i);
+    final bad = isMisspelled(i);
     final start = i;
-    while (i < text.length && shades[i] == shade && inComposing(i) == comp) {
+    while (i < text.length &&
+        shades[i] == shade &&
+        inComposing(i) == comp &&
+        isMisspelled(i) == bad) {
       i++;
     }
     var style = styleOf(shade);
+    if (bad) style = (style ?? const TextStyle()).merge(misspelledStyle);
     if (comp) style = (style ?? const TextStyle()).merge(composingStyle);
     spans.add(TextSpan(text: text.substring(start, i), style: style));
   }

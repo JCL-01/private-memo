@@ -10,8 +10,6 @@ import '../../editor/edit_navigator_bar.dart';
 import '../../editor/hidden_ranges.dart';
 import '../../editor/private_editor.dart';
 import '../../editor/private_text_controller.dart';
-import '../../spell/spell_check_runner.dart';
-import '../../spell/spell_providers.dart';
 
 /// 메모 편집 화면.
 ///
@@ -30,7 +28,6 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
   static const _saveDelay = Duration(milliseconds: 400);
 
   PrivateTextController? _controller;
-  SpellCheckRunner? _spell;
   final _focusNode = FocusNode();
   late final NotesRepository _repo;
   Timer? _saveTimer;
@@ -57,15 +54,7 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
     );
     _savedHidden = encodeRanges(controller.hidden);
     controller.addListener(_scheduleSave);
-    // 맞춤법 검사: 입력이 멈추면 바뀐 어절만 검사해 밑줄을 긋는다. (F6)
-    _spell = SpellCheckRunner(
-      controller,
-      checker: ref.read(spellCheckerProvider).value,
-    );
-    ref.listenManual(spellCheckerProvider, (_, next) {
-      final checker = next.value;
-      if (checker != null) _spell?.checker = checker;
-    });
+
     setState(() => _controller = controller);
     if (_savedContent.isEmpty) _focusNode.requestFocus();
   }
@@ -131,7 +120,6 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
         );
       }
     }
-    _spell?.dispose();
     c?.dispose();
     _focusNode.dispose();
     super.dispose();

@@ -3,6 +3,9 @@ import 'package:drift/native.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'test_helpers.dart';
+
 import 'package:material_ui/material_ui.dart';
 import 'package:private_memo/app/app.dart';
 import 'package:private_memo/data/database.dart';
@@ -53,7 +56,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('newNoteButton')));
     await settle(tester);
-    await tester.enterText(find.byKey(const Key('noteEditor')), '비밀 계획\n내일 실행');
+    await enterPrivateText(tester, '비밀 계획\n내일 실행');
     await goBack(tester);
 
     expect(find.text('비밀 계획'), findsOneWidget);
@@ -74,7 +77,7 @@ void main() {
     await pumpApp(tester);
     await tester.tap(find.byKey(const Key('newNoteButton')));
     await settle(tester);
-    await tester.enterText(find.byKey(const Key('noteEditor')), '지울 메모');
+    await enterPrivateText(tester, '지울 메모');
     await tester.tap(find.byKey(const Key('deleteNoteButton')));
     await settle(tester);
 
@@ -85,7 +88,7 @@ void main() {
     await pumpApp(tester);
     await tester.tap(find.byKey(const Key('newNoteButton')));
     await settle(tester);
-    await tester.enterText(find.byKey(const Key('noteEditor')), '우클릭 삭제');
+    await enterPrivateText(tester, '우클릭 삭제');
     await goBack(tester);
 
     await tester.tap(find.text('우클릭 삭제'), buttons: kSecondaryButton);
@@ -100,7 +103,7 @@ void main() {
     await pumpApp(tester);
     await tester.tap(find.byKey(const Key('newNoteButton')));
     await settle(tester);
-    await tester.enterText(find.byKey(const Key('noteEditor')), '하나 둘 셋 넷 다섯');
+    await enterPrivateText(tester, '하나 둘 셋 넷 다섯');
     expect(find.byKey(const Key('privateModeBar')), findsNothing);
 
     await tester.tap(find.text('프라이빗'));
