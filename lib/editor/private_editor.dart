@@ -1,6 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart' show RenderEditable;
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:material_ui/material_ui.dart';
 
 import 'box_colors.dart';
@@ -110,6 +111,38 @@ class _PrivateEditorState extends State<PrivateEditor> {
     return state.renderEditable.getPositionForPoint(at).offset;
   }
 
+  /// PC(윈도우 등)에서 우클릭한 밑줄 어절의 대체 단어 메뉴.
+  /// 휴대폰은 밑줄 어절을 짧게 누르면 기기 대체 단어 메뉴가 따로 뜬다.
+  List<ContextMenuButtonItem> _suggestionItems(
+    EditableTextState state,
+    void Function(VoidCallback) run,
+  ) {
+    final desktop = switch (defaultTargetPlatform) {
+      TargetPlatform.windows ||
+      TargetPlatform.linux ||
+      TargetPlatform.macOS => true,
+      _ => false,
+    };
+    if (!desktop) return const [];
+    final at =
+        _pressedOffset(state) ?? state.textEditingValue.selection.baseOffset;
+    if (at < 0) return const [];
+    final span = state.findSuggestionSpanAtCursorIndex(at);
+    if (span == null) return const [];
+    return [
+      for (final s in span.suggestions.take(3))
+        ContextMenuButtonItem(
+          label: s,
+          onPressed: () => run(() {
+            state.userUpdateTextEditingValue(
+              state.textEditingValue.replaced(span.range, s),
+              SelectionChangedCause.toolbar,
+            );
+          }),
+        ),
+    ];
+  }
+
   Widget _buildContextMenu(BuildContext context, EditableTextState state) {
     final boxes = _c.boxesForMenu(pressedOffset: _pressedOffset(state));
     final private = _c.privateMode;
@@ -120,6 +153,8 @@ class _PrivateEditorState extends State<PrivateEditor> {
     }
 
     final items = <ContextMenuButtonItem>[
+      // PC: 맞춤법 밑줄 어절을 우클릭하면 기기 대체 단어를 맨 위에 보여 준다. (F6-4)
+      ..._suggestionItems(state, run),
       // 박스가 걸쳐 있으면: 수정 · 보기 · 해제(일반 모드만) (F4-1)
       if (boxes.isNotEmpty) ...[
         ContextMenuButtonItem(

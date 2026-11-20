@@ -7,8 +7,10 @@ import 'package:cupertino_ui/cupertino_ui.dart'
         cupertinoTextSelectionHandleControls;
 import 'package:flutter/services.dart'
     show SpellCheckResults, SpellCheckService;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:material_ui/material_ui.dart';
 
+import '../spell/windows_spell_check_service.dart';
 import 'hidden_ranges.dart';
 import 'private_text_controller.dart';
 
@@ -49,6 +51,9 @@ class PrivateField extends StatefulWidget {
   State<PrivateField> createState() => _PrivateFieldState();
 }
 
+/// 윈도우 맞춤법 서비스는 앱 전체에서 하나만 만든다(윈도우 검사기 생성 비용 절약).
+final WindowsSpellCheckService _windowsSpellCheck = WindowsSpellCheckService();
+
 class _PrivateFieldState extends State<PrivateField>
     implements TextSelectionGestureDetectorBuilderDelegate {
   late final TextSelectionGestureDetectorBuilder _gestures =
@@ -84,9 +89,17 @@ class _PrivateFieldState extends State<PrivateField>
     if (show != _showHandles) setState(() => _showHandles = show);
   }
 
-  /// 기기에 맞춤법 검사가 있으면(안드로이드·iOS) 켠다. 윈도우는 Flutter가 기기 검사를 지원하지 않는다.
+  /// 기기 맞춤법 검사를 켠다.
+  /// - 안드로이드·iOS: Flutter가 연결해 주는 기기 맞춤법
+  /// - 윈도우: 윈도우 내장 맞춤법 API를 직접 연결한 서비스 (F6-6)
   SpellCheckConfiguration? _spellCheck(TargetPlatform platform) {
-    final service = widget.spellCheckService;
+    var service = widget.spellCheckService;
+    if (service == null &&
+        platform == TargetPlatform.windows &&
+        !kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.windows) {
+      service = _windowsSpellCheck;
+    }
     if (service == null &&
         !WidgetsBinding
             .instance
@@ -96,13 +109,9 @@ class _PrivateFieldState extends State<PrivateField>
     }
     final base = SpellCheckConfiguration(spellCheckService: service);
     return switch (platform) {
-      TargetPlatform.iOS => CupertinoTextField.inferIOSSpellCheckConfiguration(
-        base,
-      ),
-      TargetPlatform.android => TextField.inferAndroidSpellCheckConfiguration(
-        base,
-      ),
-      _ => null,
+      TargetPlatform.iOS || TargetPlatform.macOS =>
+        CupertinoTextField.inferIOSSpellCheckConfiguration(base),
+      _ => TextField.inferAndroidSpellCheckConfiguration(base),
     };
   }
 

@@ -45,6 +45,10 @@ void main() {
       expect(diffText('가', '각', cursor: 1), const TextEdit(0, 1, '각'));
     });
 
+    test('커서 정보 없이: 앞뒤 공통 부분으로 찾는다(대체 단어 바꾸기)', () {
+      expect(diffText('오늘 나왓다 ', '오늘 나왔다 '), const TextEdit(4, 1, '왔'));
+    });
+
     test('백스페이스', () {
       expect(diffText('abc', 'ab', cursor: 2), const TextEdit(2, 1, ''));
     });
