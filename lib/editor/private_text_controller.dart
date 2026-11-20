@@ -170,7 +170,10 @@ class PrivateTextController extends TextEditingController {
     final cursor = next.selection.isValid && next.selection.isCollapsed
         ? next.selection.baseOffset
         : null;
-    final edit = diffText(old.text, next.text, cursor: cursor);
+    // 타자로 입력하면 커서가 입력 끝으로 움직이므로 커서 위치로 바뀐 곳을 정확히 찾는다.
+    // 대체 단어 메뉴처럼 커서가 그대로인 변경은 앞뒤 공통 부분으로 찾는다.
+    final typed = next.selection != old.selection;
+    final edit = diffText(old.text, next.text, cursor: typed ? cursor : null);
     // 수정 범위 안 어느 어절에서든 고칠 수 있다. 고친 어절이 지금 수정 중인 어절이 된다.
     final hit = _targets.indexWhere(
       (t) => edit.start >= t.start && edit.oldEnd <= t.end,

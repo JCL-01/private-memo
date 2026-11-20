@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -174,6 +175,46 @@ void main() {
       expect(c.text, '오늘 나왔다 ');
       expect(c.hidden, [r(3, 6)]);
       expect(c.isBoxed(r(3, 6)), isTrue);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('윈도우: 가린 오타를 우클릭하면 대체 단어가 메뉴 맨 위에 뜨고, 바꿔도 가려진다', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    try {
+      final c = PrivateTextController(text: '오늘 나왓다', hidden: [r(3, 6)]);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: PrivateEditor(
+              controller: c,
+              spellCheckService: FakeDeviceSpellCheck(),
+            ),
+          ),
+        ),
+      );
+      await enterPrivateText(tester, '오늘 나왓다 ');
+      await tester.pumpAndSettle();
+      expect(c.deviceMisspelled, [r(3, 6)]);
+
+      final state = tester.state<EditableTextState>(editableFinder);
+      final box = state.renderEditable;
+      final rect = box.getLocalRectForCaret(const TextPosition(offset: 4));
+      await tester.tapAt(
+        box.localToGlobal(rect.center),
+        buttons: kSecondaryButton,
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('나왔다'), findsOneWidget);
+      expect(find.text('수정'), findsOneWidget); // 박스 메뉴도 함께
+      await tester.tap(find.text('나왔다'));
+      await tester.pumpAndSettle();
+
+      expect(c.text, '오늘 나왔다 ');
+      expect(c.hidden, [r(3, 6)]);
     } finally {
       debugDefaultTargetPlatformOverride = null;
     }
