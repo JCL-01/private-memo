@@ -1,6 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 
-import '../features/notes/note_list_screen.dart';
+import '../features/folders/folder_list_screen.dart';
 
 class PrivateMemoApp extends StatelessWidget {
   const PrivateMemoApp({super.key});
@@ -24,7 +24,7 @@ class PrivateMemoApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const NoteListScreen(),
+      home: const FolderListScreen(),
     );
   }
 }

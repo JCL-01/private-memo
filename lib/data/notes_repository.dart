@@ -11,11 +11,34 @@ class NotesRepository {
   final DateTime Function() _clock;
   static const _uuid = Uuid();
 
-  /// 최근 수정한 메모가 위에 오도록 정렬한 목록.
-  Stream<List<Note>> watchAll() {
-    return (_db.select(
-      _db.notes,
-    )..orderBy([(n) => OrderingTerm.desc(n.updatedAt)])).watch();
+  /// 삭제 후 영구 삭제까지 기간. (F1F-5)
+  static const trashRetention = Duration(days: 30);
+
+  /// [folderId] 폴더의 메모. 최근 수정한 메모가 위에 온다.
+  /// `최근 삭제된 항목`은 최근에 삭제한 메모가 위에 온다.
+  Stream<List<Note>> watchFolder(String folderId) {
+    return (_db.select(_db.notes)
+          ..where((n) => n.folderId.equals(folderId))
+          ..orderBy([
+            folderId == SystemFolders.trash
+                ? (n) => OrderingTerm.desc(n.deletedAt)
+                : (n) => OrderingTerm.desc(n.updatedAt),
+          ]))
+        .watch();
+  }
+
+  /// 폴더별 메모 개수.
+  Stream<Map<String, int>> watchCounts() {
+    final count = _db.notes.id.count();
+    final query = _db.selectOnly(_db.notes)
+      ..addColumns([_db.notes.folderId, count])
+      ..groupBy([_db.notes.folderId]);
+    return query.watch().map(
+      (rows) => {
+        for (final row in rows)
+          row.read(_db.notes.folderId)!: row.read(count) ?? 0,
+      },
+    );
   }
 
   Future<Note?> getById(String id) {
@@ -24,7 +47,8 @@ class NotesRepository {
     )..where((n) => n.id.equals(id))).getSingleOrNull();
   }
 
-  Future<Note> create() async {
+  /// [folderId] 폴더에 새 메모를 만든다.
+  Future<Note> create({String folderId = SystemFolders.notes}) async {
     final now = _clock();
     final note = Note(
       id: _uuid.v4(),
@@ -33,6 +57,9 @@ class NotesRepository {
       hiddenRanges: '[]',
       createdAt: now,
       updatedAt: now,
+      folderId: folderId == SystemFolders.trash
+          ? SystemFolders.notes
+          : folderId,
     );
     await _db.into(_db.notes).insert(note);
     return note;
@@ -62,6 +89,60 @@ class NotesRepository {
     );
   }
 
+  /// 메모를 `최근 삭제된 항목`으로 옮긴다. (F1F-5)
+  Future<void> moveToTrash(String id) async {
+    final note = await getById(id);
+    if (note == null || note.folderId == SystemFolders.trash) return;
+    await (_db.update(_db.notes)..where((n) => n.id.equals(id))).write(
+      NotesCompanion(
+        folderId: const Value(SystemFolders.trash),
+        previousFolderId: Value(note.folderId),
+        deletedAt: Value(_clock()),
+      ),
+    );
+  }
+
+  /// `최근 삭제된 항목`의 메모를 원래 폴더로 되돌린다.
+  /// 원래 폴더가 없어졌으면 `메모` 폴더로. (F1F-6)
+  Future<void> restore(String id) async {
+    final note = await getById(id);
+    if (note == null || note.folderId != SystemFolders.trash) return;
+    var target = note.previousFolderId ?? SystemFolders.notes;
+    final exists = await (_db.select(
+      _db.folders,
+    )..where((f) => f.id.equals(target))).getSingleOrNull();
+    if (exists == null || target == SystemFolders.trash) {
+      target = SystemFolders.notes;
+    }
+    await (_db.update(_db.notes)..where((n) => n.id.equals(id))).write(
+      NotesCompanion(
+        folderId: Value(target),
+        previousFolderId: const Value(null),
+        deletedAt: const Value(null),
+      ),
+    );
+  }
+
+  /// 메모를 다른 폴더로 옮긴다. (F1F-4)
+  Future<void> moveTo(String id, String folderId) async {
+    if (folderId == SystemFolders.trash) return moveToTrash(id);
+    await (_db.update(_db.notes)..where((n) => n.id.equals(id))).write(
+      NotesCompanion(folderId: Value(folderId)),
+    );
+  }
+
+  /// 삭제한 지 30일이 지난 메모를 영구 삭제한다. 앱을 켤 때 부른다. (F1F-5)
+  Future<int> purgeExpired() {
+    final limit = _clock().subtract(trashRetention);
+    return (_db.delete(_db.notes)..where(
+          (n) =>
+              n.folderId.equals(SystemFolders.trash) &
+              n.deletedAt.isSmallerThanValue(limit),
+        ))
+        .go();
+  }
+
+  /// 메모를 바로 영구 삭제한다(빈 새 메모 정리, 최근 삭제된 항목에서 영구 삭제).
   Future<void> delete(String id) {
     return (_db.delete(_db.notes)..where((n) => n.id.equals(id))).go();
   }

@@ -4,12 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../data/note.dart';
+import '../../data/database.dart';
 import '../../data/notes_repository.dart';
 import '../../data/providers.dart';
 import '../../editor/edit_navigator_bar.dart';
 import '../../editor/hidden_ranges.dart';
 import '../../editor/private_editor.dart';
 import '../../editor/private_text_controller.dart';
+import '../folders/folder_dialogs.dart';
 
 /// 메모 편집 화면.
 ///
@@ -35,6 +37,10 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
   String _savedContent = '';
   String _savedHidden = '[]';
 
+  /// 메모가 담긴 폴더. `최근 삭제된 항목`이면 읽기 전용. (F1F-6)
+  String _folderId = SystemFolders.notes;
+  bool get _inTrash => _folderId == SystemFolders.trash;
+
   @override
   void initState() {
     super.initState();
@@ -46,6 +52,7 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
     final note = await _repo.getById(widget.noteId);
     if (!mounted) return;
     _savedContent = note?.content ?? '';
+    _folderId = note?.folderId ?? SystemFolders.notes;
     final hidden = note?.hidden ?? const <HiddenRange>[];
     final controller = PrivateTextController(
       text: _savedContent,
@@ -56,7 +63,7 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
     controller.addListener(_scheduleSave);
 
     setState(() => _controller = controller);
-    if (_savedContent.isEmpty) _focusNode.requestFocus();
+    if (_savedContent.isEmpty && !_inTrash) _focusNode.requestFocus();
   }
 
   bool get _dirty {
@@ -97,18 +104,46 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
     move();
   }
 
+  /// 삭제: `최근 삭제된 항목`으로 옮긴다. 빈 메모는 바로 없앤다. (F1F-5, F1F-7)
   Future<void> _delete() async {
-    _deleted = true;
     _saveTimer?.cancel();
-    await _repo.delete(widget.noteId);
+    final c = _controller;
+    if (c != null && c.text.trim().isEmpty) {
+      _deleted = true;
+      await _repo.delete(widget.noteId);
+    } else {
+      await _save();
+      await _repo.moveToTrash(widget.noteId);
+      _deleted = true;
+    }
     if (mounted) Navigator.of(context).pop();
+  }
+
+  /// 폴더로 이동. (F1F-4)
+  Future<void> _move() async {
+    final target = await showMoveFolderSheet(
+      context,
+      ref,
+      currentFolderId: _folderId,
+    );
+    if (target == null) return;
+    await _save();
+    await _repo.moveTo(widget.noteId, target);
+    if (mounted) setState(() => _folderId = target);
+  }
+
+  /// 최근 삭제된 항목의 메모를 복구한다. (F1F-6)
+  Future<void> _restore() async {
+    await _repo.restore(widget.noteId);
+    final note = await _repo.getById(widget.noteId);
+    if (mounted) setState(() => _folderId = note?.folderId ?? _folderId);
   }
 
   @override
   void dispose() {
     _saveTimer?.cancel();
     final c = _controller;
-    if (!_deleted && c != null) {
+    if (!_deleted && c != null && !_inTrash) {
       // 나갈 때: 비어 있으면 삭제, 아니면 마지막 내용 저장
       if (c.text.trim().isEmpty) {
         _repo.delete(widget.noteId);
@@ -130,55 +165,81 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
     final c = _controller;
     return Scaffold(
       appBar: AppBar(
-        actions: [
-          if (c != null)
-            ListenableBuilder(
-              listenable: c,
-              builder: (context, _) => Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    key: const Key('undoButton'),
-                    tooltip: '되돌리기 (Ctrl+Z)',
-                    icon: const Icon(Icons.undo),
-                    onPressed: c.canUndo ? c.undo : null,
+        actions: _inTrash
+            ? [
+                TextButton(
+                  key: const Key('restoreNoteButton'),
+                  onPressed: _restore,
+                  child: const Text('복구'),
+                ),
+              ]
+            : [
+                if (c != null)
+                  ListenableBuilder(
+                    listenable: c,
+                    builder: (context, _) => Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          key: const Key('undoButton'),
+                          tooltip: '되돌리기 (Ctrl+Z)',
+                          icon: const Icon(Icons.undo),
+                          onPressed: c.canUndo ? c.undo : null,
+                        ),
+                        IconButton(
+                          key: const Key('redoButton'),
+                          tooltip: '다시 실행 (Ctrl+Y)',
+                          icon: const Icon(Icons.redo),
+                          onPressed: c.canRedo ? c.redo : null,
+                        ),
+                      ],
+                    ),
                   ),
-                  IconButton(
-                    key: const Key('redoButton'),
-                    tooltip: '다시 실행 (Ctrl+Y)',
-                    icon: const Icon(Icons.redo),
-                    onPressed: c.canRedo ? c.redo : null,
+                if (c != null)
+                  ListenableBuilder(
+                    listenable: c,
+                    builder: (context, _) => TextButton(
+                      key: const Key('privateModeToggle'),
+                      onPressed: _togglePrivateMode,
+                      child: Text(c.privateMode ? '해제' : '프라이빗'),
+                    ),
                   ),
-                ],
-              ),
-            ),
-          if (c != null)
-            ListenableBuilder(
-              listenable: c,
-              builder: (context, _) => TextButton(
-                key: const Key('privateModeToggle'),
-                onPressed: _togglePrivateMode,
-                child: Text(c.privateMode ? '해제' : '프라이빗'),
-              ),
-            ),
-          IconButton(
-            key: const Key('deleteNoteButton'),
-            tooltip: '메모 삭제',
-            icon: const Icon(Icons.delete_outline),
-            onPressed: c != null ? _delete : null,
-          ),
-        ],
+                IconButton(
+                  key: const Key('moveNoteButton'),
+                  tooltip: '폴더로 이동',
+                  icon: const Icon(Icons.drive_file_move_outline),
+                  onPressed: c != null ? _move : null,
+                ),
+                IconButton(
+                  key: const Key('deleteNoteButton'),
+                  tooltip: '메모 삭제',
+                  icon: const Icon(Icons.delete_outline),
+                  onPressed: c != null ? _delete : null,
+                ),
+              ],
       ),
       body: c == null
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
+                if (_inTrash)
+                  Material(
+                    color: Theme.of(context).colorScheme.surfaceContainer,
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
+                      child: Text('최근 삭제된 항목의 메모입니다. 편집하려면 복구하세요.'),
+                    ),
+                  ),
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: PrivateEditor(
                       controller: c,
                       focusNode: _focusNode,
+                      readOnly: _inTrash,
                       style: Theme.of(context).textTheme.bodyLarge
                           ?.copyWith(fontSize: 17, height: 1.5),
                     ),

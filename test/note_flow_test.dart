@@ -43,6 +43,9 @@ void main() {
       ),
     );
     await settle(tester);
+    // 첫 화면은 폴더 목록. `메모` 폴더로 들어간다.
+    await tester.tap(find.byKey(const Key('folder-notes')));
+    await settle(tester);
   }
 
   Future<void> goBack(WidgetTester tester) async {
@@ -97,6 +100,53 @@ void main() {
     await settle(tester);
 
     expect(find.text('우클릭 삭제'), findsNothing);
+
+    // 최근 삭제된 항목으로 갔다가 복구 (F1F-5, F1F-6)
+    await goBack(tester);
+    await tester.tap(find.byKey(const Key('folder-trash')));
+    await settle(tester);
+    expect(find.text('우클릭 삭제'), findsOneWidget);
+    expect(find.textContaining('30일 후 영구 삭제'), findsOneWidget);
+    await tester.tap(find.text('우클릭 삭제'), buttons: kSecondaryButton);
+    await settle(tester);
+    await tester.tap(find.text('복구'));
+    await settle(tester);
+    expect(find.text('우클릭 삭제'), findsNothing);
+    await goBack(tester);
+    await tester.tap(find.byKey(const Key('folder-notes')));
+    await settle(tester);
+    expect(find.text('우클릭 삭제'), findsOneWidget);
+  });
+
+  testWidgets('폴더를 만들고 메모를 그 폴더로 옮긴다 (F1F-3, F1F-4)', (tester) async {
+    await pumpApp(tester);
+    await tester.tap(find.byKey(const Key('newNoteButton')));
+    await settle(tester);
+    await enterPrivateText(tester, '옮길 메모');
+    await goBack(tester);
+    await goBack(tester);
+
+    await tester.tap(find.byKey(const Key('newFolderButton')));
+    await settle(tester);
+    await tester.enterText(find.byKey(const Key('folderNameField')), '회의');
+    await tester.tap(find.byKey(const Key('folderNameSave')));
+    await settle(tester);
+    expect(find.text('회의'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('folder-notes')));
+    await settle(tester);
+    await tester.tap(find.text('옮길 메모'), buttons: kSecondaryButton);
+    await settle(tester);
+    await tester.tap(find.text('폴더로 이동'));
+    await settle(tester);
+    await tester.tap(find.text('회의').last);
+    await settle(tester);
+    expect(find.text('옮길 메모'), findsNothing);
+
+    await goBack(tester);
+    await tester.tap(find.text('회의'));
+    await settle(tester);
+    expect(find.text('옮길 메모'), findsOneWidget);
   });
 
   testWidgets('프라이빗 버튼으로 켜고 해제로 끄며, 상태가 저장된다', (tester) async {
