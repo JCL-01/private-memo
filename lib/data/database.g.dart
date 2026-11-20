@@ -112,6 +112,16 @@ class $NotesTable extends Notes with TableInfo<$NotesTable, Note> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _blocksMeta = const VerificationMeta('blocks');
+  @override
+  late final GeneratedColumn<String> blocks = GeneratedColumn<String>(
+    'blocks',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -123,6 +133,7 @@ class $NotesTable extends Notes with TableInfo<$NotesTable, Note> {
     folderId,
     deletedAt,
     previousFolderId,
+    blocks,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -202,6 +213,12 @@ class $NotesTable extends Notes with TableInfo<$NotesTable, Note> {
         ),
       );
     }
+    if (data.containsKey('blocks')) {
+      context.handle(
+        _blocksMeta,
+        blocks.isAcceptableOrUnknown(data['blocks']!, _blocksMeta),
+      );
+    }
     return context;
   }
 
@@ -247,6 +264,10 @@ class $NotesTable extends Notes with TableInfo<$NotesTable, Note> {
         DriftSqlType.string,
         data['${effectivePrefix}previous_folder_id'],
       ),
+      blocks: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}blocks'],
+      )!,
     );
   }
 
@@ -272,6 +293,9 @@ class Note extends DataClass implements Insertable<Note> {
 
   /// 삭제 전 폴더. 복구할 때 돌아갈 곳. (F1F-6)
   final String? previousFolderId;
+
+  /// 정리 기능의 원본·정리본 박스(JSON 배열). 본문(content) 위에 놓인다. (F8-2)
+  final String blocks;
   const Note({
     required this.id,
     required this.content,
@@ -282,6 +306,7 @@ class Note extends DataClass implements Insertable<Note> {
     required this.folderId,
     this.deletedAt,
     this.previousFolderId,
+    required this.blocks,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -299,6 +324,7 @@ class Note extends DataClass implements Insertable<Note> {
     if (!nullToAbsent || previousFolderId != null) {
       map['previous_folder_id'] = Variable<String>(previousFolderId);
     }
+    map['blocks'] = Variable<String>(blocks);
     return map;
   }
 
@@ -317,6 +343,7 @@ class Note extends DataClass implements Insertable<Note> {
       previousFolderId: previousFolderId == null && nullToAbsent
           ? const Value.absent()
           : Value(previousFolderId),
+      blocks: Value(blocks),
     );
   }
 
@@ -335,6 +362,7 @@ class Note extends DataClass implements Insertable<Note> {
       folderId: serializer.fromJson<String>(json['folderId']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
       previousFolderId: serializer.fromJson<String?>(json['previousFolderId']),
+      blocks: serializer.fromJson<String>(json['blocks']),
     );
   }
   @override
@@ -350,6 +378,7 @@ class Note extends DataClass implements Insertable<Note> {
       'folderId': serializer.toJson<String>(folderId),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
       'previousFolderId': serializer.toJson<String?>(previousFolderId),
+      'blocks': serializer.toJson<String>(blocks),
     };
   }
 
@@ -363,6 +392,7 @@ class Note extends DataClass implements Insertable<Note> {
     String? folderId,
     Value<DateTime?> deletedAt = const Value.absent(),
     Value<String?> previousFolderId = const Value.absent(),
+    String? blocks,
   }) => Note(
     id: id ?? this.id,
     content: content ?? this.content,
@@ -375,6 +405,7 @@ class Note extends DataClass implements Insertable<Note> {
     previousFolderId: previousFolderId.present
         ? previousFolderId.value
         : this.previousFolderId,
+    blocks: blocks ?? this.blocks,
   );
   Note copyWithCompanion(NotesCompanion data) {
     return Note(
@@ -393,6 +424,7 @@ class Note extends DataClass implements Insertable<Note> {
       previousFolderId: data.previousFolderId.present
           ? data.previousFolderId.value
           : this.previousFolderId,
+      blocks: data.blocks.present ? data.blocks.value : this.blocks,
     );
   }
 
@@ -407,7 +439,8 @@ class Note extends DataClass implements Insertable<Note> {
           ..write('updatedAt: $updatedAt, ')
           ..write('folderId: $folderId, ')
           ..write('deletedAt: $deletedAt, ')
-          ..write('previousFolderId: $previousFolderId')
+          ..write('previousFolderId: $previousFolderId, ')
+          ..write('blocks: $blocks')
           ..write(')'))
         .toString();
   }
@@ -423,6 +456,7 @@ class Note extends DataClass implements Insertable<Note> {
     folderId,
     deletedAt,
     previousFolderId,
+    blocks,
   );
   @override
   bool operator ==(Object other) =>
@@ -436,7 +470,8 @@ class Note extends DataClass implements Insertable<Note> {
           other.updatedAt == this.updatedAt &&
           other.folderId == this.folderId &&
           other.deletedAt == this.deletedAt &&
-          other.previousFolderId == this.previousFolderId);
+          other.previousFolderId == this.previousFolderId &&
+          other.blocks == this.blocks);
 }
 
 class NotesCompanion extends UpdateCompanion<Note> {
@@ -449,6 +484,7 @@ class NotesCompanion extends UpdateCompanion<Note> {
   final Value<String> folderId;
   final Value<DateTime?> deletedAt;
   final Value<String?> previousFolderId;
+  final Value<String> blocks;
   final Value<int> rowid;
   const NotesCompanion({
     this.id = const Value.absent(),
@@ -460,6 +496,7 @@ class NotesCompanion extends UpdateCompanion<Note> {
     this.folderId = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.previousFolderId = const Value.absent(),
+    this.blocks = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   NotesCompanion.insert({
@@ -472,6 +509,7 @@ class NotesCompanion extends UpdateCompanion<Note> {
     this.folderId = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.previousFolderId = const Value.absent(),
+    this.blocks = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        createdAt = Value(createdAt),
@@ -486,6 +524,7 @@ class NotesCompanion extends UpdateCompanion<Note> {
     Expression<String>? folderId,
     Expression<DateTime>? deletedAt,
     Expression<String>? previousFolderId,
+    Expression<String>? blocks,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -498,6 +537,7 @@ class NotesCompanion extends UpdateCompanion<Note> {
       if (folderId != null) 'folder_id': folderId,
       if (deletedAt != null) 'deleted_at': deletedAt,
       if (previousFolderId != null) 'previous_folder_id': previousFolderId,
+      if (blocks != null) 'blocks': blocks,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -512,6 +552,7 @@ class NotesCompanion extends UpdateCompanion<Note> {
     Value<String>? folderId,
     Value<DateTime?>? deletedAt,
     Value<String?>? previousFolderId,
+    Value<String>? blocks,
     Value<int>? rowid,
   }) {
     return NotesCompanion(
@@ -524,6 +565,7 @@ class NotesCompanion extends UpdateCompanion<Note> {
       folderId: folderId ?? this.folderId,
       deletedAt: deletedAt ?? this.deletedAt,
       previousFolderId: previousFolderId ?? this.previousFolderId,
+      blocks: blocks ?? this.blocks,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -558,6 +600,9 @@ class NotesCompanion extends UpdateCompanion<Note> {
     if (previousFolderId.present) {
       map['previous_folder_id'] = Variable<String>(previousFolderId.value);
     }
+    if (blocks.present) {
+      map['blocks'] = Variable<String>(blocks.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -576,6 +621,7 @@ class NotesCompanion extends UpdateCompanion<Note> {
           ..write('folderId: $folderId, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('previousFolderId: $previousFolderId, ')
+          ..write('blocks: $blocks, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -914,6 +960,7 @@ typedef $$NotesTableCreateCompanionBuilder = NotesCompanion Function({
   Value<String> folderId,
   Value<DateTime?> deletedAt,
   Value<String?> previousFolderId,
+  Value<String> blocks,
   Value<int> rowid,
 });
 typedef $$NotesTableUpdateCompanionBuilder = NotesCompanion Function({
@@ -926,6 +973,7 @@ typedef $$NotesTableUpdateCompanionBuilder = NotesCompanion Function({
   Value<String> folderId,
   Value<DateTime?> deletedAt,
   Value<String?> previousFolderId,
+  Value<String> blocks,
   Value<int> rowid,
 });
 
@@ -979,6 +1027,11 @@ class $$NotesTableFilterComposer extends Composer<_$AppDatabase, $NotesTable> {
 
   ColumnFilters<String> get previousFolderId => $composableBuilder(
     column: $table.previousFolderId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get blocks => $composableBuilder(
+    column: $table.blocks,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -1036,6 +1089,11 @@ class $$NotesTableOrderingComposer
     column: $table.previousFolderId,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get blocks => $composableBuilder(
+    column: $table.blocks,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$NotesTableAnnotationComposer
@@ -1079,6 +1137,9 @@ class $$NotesTableAnnotationComposer
     column: $table.previousFolderId,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get blocks =>
+      $composableBuilder(column: $table.blocks, builder: (column) => column);
 }
 
 class $$NotesTableTableManager
@@ -1118,6 +1179,7 @@ class $$NotesTableTableManager
                 Value<String> folderId = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<String?> previousFolderId = const Value.absent(),
+                Value<String> blocks = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => NotesCompanion(
                 id: id,
@@ -1129,6 +1191,7 @@ class $$NotesTableTableManager
                 folderId: folderId,
                 deletedAt: deletedAt,
                 previousFolderId: previousFolderId,
+                blocks: blocks,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -1142,6 +1205,7 @@ class $$NotesTableTableManager
                 Value<String> folderId = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<String?> previousFolderId = const Value.absent(),
+                Value<String> blocks = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => NotesCompanion.insert(
                 id: id,
@@ -1153,6 +1217,7 @@ class $$NotesTableTableManager
                 folderId: folderId,
                 deletedAt: deletedAt,
                 previousFolderId: previousFolderId,
+                blocks: blocks,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

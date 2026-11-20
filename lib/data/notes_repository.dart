@@ -57,6 +57,7 @@ class NotesRepository {
       hiddenRanges: '[]',
       createdAt: now,
       updatedAt: now,
+      blocks: '[]',
       folderId: folderId == SystemFolders.trash
           ? SystemFolders.notes
           : folderId,
@@ -79,6 +80,13 @@ class NotesRepository {
             : Value(hiddenRanges),
         updatedAt: Value(_clock()),
       ),
+    );
+  }
+
+  /// 정리 기능의 박스들(JSON)을 저장한다. (F8-2)
+  Future<void> updateBlocks(String id, String blocks) {
+    return (_db.update(_db.notes)..where((n) => n.id.equals(id))).write(
+      NotesCompanion(blocks: Value(blocks), updatedAt: Value(_clock())),
     );
   }
 

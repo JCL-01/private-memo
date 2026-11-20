@@ -40,6 +40,9 @@ class Notes extends Table {
   /// 삭제 전 폴더. 복구할 때 돌아갈 곳. (F1F-6)
   TextColumn get previousFolderId => text().nullable()();
 
+  /// 정리 기능의 원본·정리본 박스(JSON 배열). 본문(content) 위에 놓인다. (F8-2)
+  TextColumn get blocks => text().withDefault(const Constant('[]'))();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -64,7 +67,7 @@ class AppDatabase extends _$AppDatabase {
     : super(executor ?? driftDatabase(name: 'private_memo'));
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -78,6 +81,10 @@ class AppDatabase extends _$AppDatabase {
         await m.addColumn(notes, notes.folderId);
         await m.addColumn(notes, notes.deletedAt);
         await m.addColumn(notes, notes.previousFolderId);
+      }
+      if (from < 3) {
+        // 2 → 3: 정리 기능의 박스.
+        await m.addColumn(notes, notes.blocks);
       }
     },
     beforeOpen: (details) async {

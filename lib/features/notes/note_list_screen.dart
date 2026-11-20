@@ -148,7 +148,7 @@ class _NoteTile extends ConsumerWidget {
     final subtitleStyle = theme.textTheme.bodyMedium?.copyWith(
       color: theme.colorScheme.onSurfaceVariant,
     );
-    final hidden = note.hidden;
+    final hidden = note.displayHidden;
     final boxColor = boxColorOf(context);
     final titleLine = note.titleLine;
     final previewLine = note.previewLine;
