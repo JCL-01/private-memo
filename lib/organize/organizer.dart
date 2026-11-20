@@ -35,10 +35,21 @@ class OrganizeResult {
     if (todos.isNotEmpty) {
       if (summary.isNotEmpty) out.writeln();
       out.writeln('할 일');
+      // 다른 사람이 맡은 일이 있으면 사람별로 나눈다. 내 일이 먼저.
+      final owners = <String>[''];
       for (final t in todos) {
-        out.writeln('- ${t.task}${t.when.isEmpty ? '' : ' (일정: ${t.when})'}');
-        for (final d in t.details) {
-          out.writeln('  · $d');
+        if (!owners.contains(t.owner)) owners.add(t.owner);
+      }
+      final split = owners.length > 1;
+      for (final owner in owners) {
+        final mine = todos.where((t) => t.owner == owner).toList();
+        if (mine.isEmpty) continue;
+        if (split) out.writeln(owner.isEmpty ? '[나]' : '[$owner]');
+        for (final t in mine) {
+          out.writeln('- ${t.task}${t.when.isEmpty ? '' : ' (${t.when})'}');
+          for (final d in t.details) {
+            out.writeln('  · $d');
+          }
         }
       }
     }

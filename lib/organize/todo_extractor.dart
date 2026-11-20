@@ -2,7 +2,15 @@ import 'date_finder.dart';
 
 /// 정리본의 할 일 한 개. (F8-2d)
 class TodoItem {
-  const TodoItem({required this.task, this.when = '', this.details = const []});
+  const TodoItem({
+    required this.task,
+    this.when = '',
+    this.details = const [],
+    this.owner = '',
+  });
+
+  /// 이 일을 맡은 사람. 빈 문자열이면 메모를 쓴 사람(나). (역할 나누기)
+  final String owner;
 
   /// 할 일 내용(메모의 그 줄).
   final String task;
@@ -13,8 +21,15 @@ class TodoItem {
   /// 다음 줄에 이어 적은 세부 내용(살 물건 목록 등).
   final List<String> details;
 
+  TodoItem withDetail(String detail) => TodoItem(
+    task: task,
+    when: when,
+    details: [...details, detail],
+    owner: owner,
+  );
+
   @override
-  String toString() => 'TodoItem($task, $when, $details)';
+  String toString() => 'TodoItem($task, $when, $details, $owner)';
 }
 
 final _bullet = RegExp(r'^[-*•·]\s*');
@@ -44,7 +59,31 @@ bool _isAction(String line) {
 }
 
 /// 다른 사람이 하는 일.
-final _other = RegExp(r'(담당\)?\s*$|님이|씨가|누나가|형이|언니가|오빠가|엄마가|아빠가)');
+const _kin = r'누나|형|언니|오빠|엄마|아빠|동생|남편|아내|와이프';
+
+/// 다른 사람이 맡은 일: "(지수 담당)", "요리는 누나가", "김팀장님이 …", "누나가 요리".
+final _ownerTag = RegExp(r'\(?\s*([가-힣A-Za-z]+)\s*담당\s*\)?');
+final _ownerTail = RegExp('\\s*(?:([가-힣A-Za-z]+?)(님|씨)|($_kin))(?:이|가)\\s*\$');
+final _ownerHead = RegExp('^(?:([가-힣A-Za-z]+?)(님|씨)|($_kin))(?:이|가)\\s+');
+
+/// 줄에서 맡은 사람을 찾고, 그 사람을 뺀 할 일 내용을 돌려준다. 내 일이면 null.
+({String owner, String task})? _otherOwner(String line) {
+  final tag = _ownerTag.firstMatch(line);
+  if (tag != null) {
+    final task = line.replaceRange(tag.start, tag.end, '').trim();
+    return (owner: tag.group(1)!, task: task);
+  }
+  for (final re in [_ownerTail, _ownerHead]) {
+    final m = re.firstMatch(line);
+    if (m == null) continue;
+    final owner = m.group(3) ?? '${m.group(1)}${m.group(2)}';
+    var task = line.replaceRange(m.start, m.end, '').trim();
+    // "요리는 누나가" → "요리"
+    task = task.replaceFirst(RegExp(r'(은|는)$'), '').trim();
+    return (owner: owner, task: task);
+  }
+  return null;
+}
 
 /// 단순 정보 기록.
 final _info = RegExp(
@@ -95,18 +134,24 @@ List<TodoItem> extractTodos(String text) {
         dates.isEmpty &&
         !_isAction(line) &&
         _itemList.hasMatch(line)) {
-      final last = todos.removeLast();
-      todos.add(
-        TodoItem(
-          task: last.task,
-          when: last.when,
-          details: [...last.details, line],
-        ),
-      );
+      todos.add(todos.removeLast().withDetail(line));
       continue;
     }
 
-    if (_other.hasMatch(line)) continue;
+    // 다른 사람이 맡은 일은 그 사람의 할 일로 나눈다.
+    final other = _otherOwner(line);
+    if (other != null && other.task.isNotEmpty) {
+      final d = findDates(other.task);
+      todos.add(
+        TodoItem(
+          task: other.task,
+          when: d.isEmpty ? '' : d.first.text,
+          owner: other.owner,
+        ),
+      );
+      lastTodoLine = line;
+      continue;
+    }
     if (_info.hasMatch(line) && dates.isEmpty) continue;
     final opinion = _opinion.hasMatch(line);
     if (opinion && dates.isEmpty) continue;

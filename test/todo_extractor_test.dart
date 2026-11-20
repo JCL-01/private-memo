@@ -4,21 +4,28 @@ import 'package:private_memo/organize/todo_extractor.dart';
 String show(List<TodoItem> todos) => todos
     .map(
       (t) =>
-          '${t.task}'
+          '${t.owner.isEmpty ? '' : '[${t.owner}] '}${t.task}'
           '${t.details.isEmpty ? '' : ' · ${t.details.join(', ')}'}'
           '${t.when.isEmpty ? '' : ' (${t.when})'}',
     )
     .join(' | ');
 
 void main() {
-  test('할 일 여러 개를 나누고, 물건 목록은 세부 내용, 다른 사람 일은 제외', () {
+  test('할 일 여러 개를 나누고, 물건 목록은 세부 내용, 다른 사람 일은 그 사람 몫으로', () {
     expect(
       show(
         extractTodos(
           '내일 3시 장보고 오기\n당근, 파채, 소고기 두 근\n요리는 누나가\n28일 13:30 찬양팀 연습',
         ),
       ),
-      '내일 3시 장보고 오기 · 당근, 파채, 소고기 두 근 (내일 3시) | 28일 13:30 찬양팀 연습 (28일 13:30)',
+      '내일 3시 장보고 오기 · 당근, 파채, 소고기 두 근 (내일 3시) | [누나] 요리 | 28일 13:30 찬양팀 연습 (28일 13:30)',
+    );
+  });
+
+  test('역할 나누기: 담당·님이·가족', () {
+    expect(
+      show(extractTodos('디자인 시안 수정 (지수 담당)\n김팀장님이 견적 검토\n엄마가 반찬 준비\n설거지 하기')),
+      '[지수] 디자인 시안 수정 | [김팀장님] 견적 검토 | [엄마] 반찬 준비 | 설거지 하기',
     );
   });
 

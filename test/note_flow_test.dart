@@ -195,7 +195,7 @@ void main() {
     await settle(tester);
     expect(find.text('원본'), findsOneWidget);
     expect(find.text('정리본'), findsOneWidget);
-    expect(find.textContaining('(일정: 28일 13:30)'), findsOneWidget);
+    expect(find.textContaining('(28일 13:30)'), findsOneWidget);
 
     // 저장됨
     final saved = await tester.runAsync(() => db.select(db.notes).getSingle());
