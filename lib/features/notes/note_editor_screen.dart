@@ -12,6 +12,7 @@ import '../../editor/edit_navigator_bar.dart';
 import '../../editor/hidden_ranges.dart';
 import '../../editor/private_editor.dart';
 import '../../editor/private_text_controller.dart';
+import '../../editor/private_view.dart';
 import '../../organize/block_box.dart';
 import '../../organize/note_blocks.dart';
 import '../../organize/organizer.dart';
@@ -63,6 +64,9 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
   bool _organizing = false;
 
   bool get _isQuick => _folderId == SystemFolders.quick;
+
+  /// 정리 모드: 원본·정리본 박스 한 쌍만 보이고, 추가로 글을 쓸 수 없다. (F8-2j)
+  bool get _organizeMode => _blocks.isNotEmpty;
 
   @override
   void initState() {
@@ -175,12 +179,18 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
     await _repo.updateBlocks(widget.noteId, encodeBlocks(_blocks));
   }
 
-  bool get _canUndo => (_controller?.canUndo ?? false) || _docUndo.isNotEmpty;
+  bool get _canUndo =>
+      (_controller?.canUndo ?? false) || _docUndo.isNotEmpty || _organizeMode;
   bool get _canRedo => (_controller?.canRedo ?? false) || _docRedo.isNotEmpty;
 
   /// 되돌리기: 글자 편집이 있으면 그것부터, 없으면 정리하기·박스 변경을 되돌린다.
   void _undo() {
     final c = _controller!;
+    if (_organizeMode) {
+      // 정리 모드에서 되돌리기 = 정리 취소. (F8-2e)
+      _cancelOrganize();
+      return;
+    }
     if (c.canUndo) {
       c.undo();
     } else if (_docUndo.isNotEmpty) {
@@ -244,6 +254,43 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
     ),
   );
 
+  /// `선택`: 원본·정리본 중 하나만 남긴다. 짝이 되는 다른 박스는 지우고,
+  /// 선택한 내용은 박스에서 빠져나와 본문이 된다. (F8-2b)
+  Future<void> _selectBlock(int i) async {
+    final c = _controller!;
+    final chosen = _blocks[i];
+    // 정리하기 한 번에 [원본, 정리본] 한 쌍이 생긴다. 고른 박스의 짝을 찾는다.
+    final pairStart = chosen.kind == BlockKind.original ? i : i - 1;
+    final hasPair =
+        pairStart >= 0 &&
+        pairStart + 1 < _blocks.length &&
+        _blocks[pairStart].kind == BlockKind.original &&
+        _blocks[pairStart + 1].kind == BlockKind.organized;
+    final remove = hasPair ? {pairStart, pairStart + 1} : {i};
+    final rest = [
+      for (var k = 0; k < _blocks.length; k++)
+        if (!remove.contains(k)) _blocks[k],
+    ];
+
+    // 고른 내용을 본문 앞에 놓는다. 가린 범위도 함께 옮긴다.
+    // 가려져 있던 정리본은 본문에서도 모든 어절을 가린 채로 둔다(프라이빗 드래그로 해제 가능).
+    final chosenHidden = chosen.isPrivate
+        ? allWords(chosen.text)
+        : chosen.hidden;
+    final rest0 = c.text;
+    final sep = rest0.trim().isEmpty ? '' : '\n';
+    final text = rest0.trim().isEmpty
+        ? chosen.text
+        : '${chosen.text}$sep$rest0';
+    final shift = chosen.text.length + sep.length;
+    final hidden = [
+      ...chosenHidden,
+      if (rest0.trim().isNotEmpty)
+        for (final r in c.hidden) HiddenRange(r.start + shift, r.end + shift),
+    ];
+    await _applyDoc(_DocState(rest, text, hidden));
+  }
+
   Future<void> _copyBlock(int i) async {
     await Clipboard.setData(ClipboardData(text: _blocks[i].text));
     if (!mounted) return;
@@ -251,9 +298,34 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
         .showSnackBar(SnackBar(content: Text('${_blocks[i].label}을 복사했습니다.')));
   }
 
+  /// 잘라내기: 이 버전은 클립보드로 옮기고, 남은 다른 버전이 선택된다. (F8-2i)
   Future<void> _cutBlock(int i) async {
     await Clipboard.setData(ClipboardData(text: _blocks[i].text));
-    await _deleteBlock(i);
+    final other = _blocks[i].kind == BlockKind.original ? i + 1 : i - 1;
+    final hasOther =
+        other >= 0 &&
+        other < _blocks.length &&
+        _blocks[other].kind != _blocks[i].kind;
+    if (hasOther) {
+      await _selectBlock(other);
+    } else {
+      await _deleteBlock(i);
+    }
+  }
+
+  /// `정리 취소`(또는 정리 모드에서 되돌리기): 정리하기 전으로 돌아간다. (F8-2e)
+  Future<void> _cancelOrganize() async {
+    final original = _blocks.firstWhere(
+      (b) => b.kind == BlockKind.original,
+      orElse: () => _blocks.first,
+    );
+    // 정리하기 직전 상태가 기록에 있으면 그대로, 없으면(다시 연 메모) 원본으로 되돌린다.
+    final before = _docUndo.isNotEmpty
+        ? _docUndo.removeLast()
+        : _DocState(const [], original.text, original.hidden);
+    _docRedo.add(_docState());
+    await _applyDoc(before, record: false);
+    if (mounted) setState(() {});
   }
 
   /// 정리본 `해제` / `가리기`. (F8-2f)
@@ -272,7 +344,7 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
           BlockBox(
             key: _blockKeys.putIfAbsent(i, GlobalKey.new),
             block: _blocks[i],
-            onDelete: () => _deleteBlock(i),
+            onSelect: () => _selectBlock(i),
             onCut: () => _cutBlock(i),
             onCopy: () => _copyBlock(i),
             onToggleReveal: _blocks[i].isPrivate
@@ -372,13 +444,20 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                 if (c != null && _isQuick)
                   ListenableBuilder(
                     listenable: c,
-                    builder: (context, _) => TextButton(
-                      key: const Key('organizeButton'),
-                      onPressed: c.text.trim().isEmpty || _organizing
-                          ? null
-                          : _organize,
-                      child: Text(_organizing ? '정리 중…' : '정리'),
-                    ),
+                    builder: (context, _) => _organizeMode
+                        // 정리한 뒤에는 `정리 취소`. (F8-2e)
+                        ? TextButton(
+                            key: const Key('cancelOrganizeButton'),
+                            onPressed: _cancelOrganize,
+                            child: const Text('정리 취소'),
+                          )
+                        : TextButton(
+                            key: const Key('organizeButton'),
+                            onPressed: c.text.trim().isEmpty || _organizing
+                                ? null
+                                : _organize,
+                            child: Text(_organizing ? '정리 중…' : '정리'),
+                          ),
                   ),
                 if (c != null)
                   ListenableBuilder(
@@ -424,36 +503,22 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           child: _editor(c),
                         )
-                      // 박스가 있으면 박스들 아래에 이어 쓰는 본문을 둔다.
-                      : LayoutBuilder(
-                          builder: (context, constraints) =>
-                              SingleChildScrollView(
-                                controller: _docScroll,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                ),
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.stretch,
-                                  children: [
-                                    _blockList(),
-                                    SizedBox(
-                                      height: constraints.maxHeight * 0.6,
-                                      child: _editor(c),
-                                    ),
-                                  ],
-                                ),
-                              ),
+                      // 정리 모드: 원본·정리본 박스만 보이고 추가로 쓸 수 없다. (F8-2j)
+                      : SingleChildScrollView(
+                          controller: _docScroll,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: _blockList(),
                         ),
                 ),
-                EditNavigatorBar(controller: c),
-                _PrivateModeBar(
-                  controller: c,
-                  onRecent: () => _jump(c.jumpToRecent),
-                  onLast: () => _jump(c.jumpToLast),
-                  onPrev: () => _jump(() => c.moveCurrentWord(-1)),
-                  onNext: () => _jump(() => c.moveCurrentWord(1)),
-                ),
+                if (!_organizeMode) EditNavigatorBar(controller: c),
+                if (!_organizeMode)
+                  _PrivateModeBar(
+                    controller: c,
+                    onRecent: () => _jump(c.jumpToRecent),
+                    onLast: () => _jump(c.jumpToLast),
+                    onPrev: () => _jump(() => c.moveCurrentWord(-1)),
+                    onNext: () => _jump(() => c.moveCurrentWord(1)),
+                  ),
               ],
             ),
     );

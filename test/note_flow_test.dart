@@ -196,6 +196,19 @@ void main() {
     expect(find.text('원본'), findsOneWidget);
     expect(find.text('정리본'), findsOneWidget);
     expect(find.textContaining('(28일 13:30)'), findsOneWidget);
+    // 정리 모드: 정리 취소 버튼, 추가로 쓸 본문이 없다 (F8-2e, F8-2j)
+    expect(find.byKey(const Key('organizeButton')), findsNothing);
+    expect(find.byKey(const Key('cancelOrganizeButton')), findsOneWidget);
+    expect(find.text('메모를 입력하세요'), findsNothing);
+
+    // 정리 취소 → 정리 전으로, 다시 정리
+    await tester.tap(find.byKey(const Key('cancelOrganizeButton')));
+    await settle(tester);
+    expect(find.text('원본'), findsNothing);
+    expect(find.byKey(const Key('organizeButton')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('organizeButton')));
+    await settle(tester);
+    expect(find.text('정리본'), findsOneWidget);
 
     // 저장됨
     final saved = await tester.runAsync(() => db.select(db.notes).getSingle());
@@ -213,11 +226,36 @@ void main() {
     await settle(tester);
     expect(find.text('정리본'), findsOneWidget);
 
-    // 정리본 박스 삭제
-    await tester.tap(find.byKey(const Key('blockDelete-정리본')));
+    // 정리본 선택 → 원본은 지워지고 정리본 내용이 박스 밖 본문이 된다 (F8-2b)
+    await tester.tap(find.byKey(const Key('blockSelect-정리본')));
     await settle(tester);
     expect(find.text('정리본'), findsNothing);
+    expect(find.text('원본'), findsNothing);
+    final note = await tester.runAsync(() => db.select(db.notes).getSingle());
+    expect(note!.content, startsWith('할 일\n'));
+    expect(note.content, contains('(28일 13:30)'));
+    expect(note.blocks, '[]');
+
+    // 되돌리기 → 두 박스가 다시
+    await tester.tap(find.byKey(const Key('undoButton')));
+    await settle(tester);
     expect(find.text('원본'), findsOneWidget);
+    expect(find.text('정리본'), findsOneWidget);
+
+    // 원본 선택 → 원래 글만 본문으로
+    await tester.tap(find.byKey(const Key('blockSelect-원본')));
+    await settle(tester);
+    final note2 = await tester.runAsync(() => db.select(db.notes).getSingle());
+    expect(note2!.content, '내일 3시 장보고 오기\n28일 13:30 찬양팀 연습');
+
+    // 다시 정리 → 원본 잘라내기 → 정리본이 선택된다 (F8-2i)
+    await tester.tap(find.byKey(const Key('organizeButton')));
+    await settle(tester);
+    await tester.tap(find.byKey(const Key('blockCut-원본')));
+    await settle(tester);
+    expect(find.text('정리본'), findsNothing);
+    final note3 = await tester.runAsync(() => db.select(db.notes).getSingle());
+    expect(note3!.content, startsWith('할 일\n'));
   });
 
   testWidgets('메모 폴더에는 정리 버튼이 없다', (tester) async {

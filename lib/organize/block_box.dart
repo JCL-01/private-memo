@@ -7,20 +7,22 @@ import 'note_blocks.dart';
 
 /// 원본·정리본 박스. 채팅 답변의 코드 블록처럼 상단 바가 있다. (F8-2a, F8-2b)
 ///
-/// 상단 바: 왼쪽 라벨, 오른쪽에 ✕(삭제) · 가위(잘라내기) · 복사. 정리본이 가려져 있으면 `해제`/`가리기`.
+/// 상단 바: 왼쪽 라벨, 오른쪽에 `선택` · 가위(잘라내기) · 복사. 정리본이 가려져 있으면 `해제`/`가리기`.
 /// 스크롤해서 상단 바가 화면 위로 사라지면 바가 박스 아래쪽으로 내려온다. (F8-2c)
 class BlockBox extends StatefulWidget {
   const BlockBox({
     super.key,
     required this.block,
-    required this.onDelete,
+    required this.onSelect,
     required this.onCut,
     required this.onCopy,
     this.onToggleReveal,
   });
 
   final NoteBlock block;
-  final VoidCallback onDelete;
+
+  /// `선택`: 이 버전만 남기고 박스에서 꺼낸다.
+  final VoidCallback onSelect;
   final VoidCallback onCut;
   final VoidCallback onCopy;
 
@@ -54,7 +56,11 @@ class _BlockBoxState extends State<BlockBox> {
     super.dispose();
   }
 
-  /// 상단 바가 화면 위로 가려졌는지 확인해 바 위치를 정한다.
+  /// 박스 바깥 여백(위아래).
+  static const _margin = 8.0;
+
+  /// 상단 바가 화면 위로 조금이라도 잘리면 바를 박스 아래로 옮긴다. (F8-2c)
+  /// 박스 위치가 아니라 바 자체가 보이는지로 판단한다.
   void _update() {
     if (!mounted) return;
     final box = context.findRenderObject() as RenderBox?;
@@ -63,11 +69,14 @@ class _BlockBoxState extends State<BlockBox> {
     if (box == null || viewport == null || !box.hasSize || !box.attached) {
       return;
     }
-    final top =
+    final boxTop =
         box.localToGlobal(Offset.zero).dy -
         viewport.localToGlobal(Offset.zero).dy;
-    final bottom = top + box.size.height;
-    final atBottom = top < 0 && bottom > _barHeight * 2;
+    // 상단 바가 있을 자리의 위쪽 끝(바깥 여백 다음).
+    final barTop = boxTop + _margin;
+    // 박스 아래쪽 끝(바깥 여백 앞). 박스가 화면 위로 다 사라졌으면 바를 옮길 필요가 없다.
+    final boxBottom = boxTop + box.size.height - _margin;
+    final atBottom = barTop < 0 && boxBottom > 0;
     if (atBottom != _barAtBottom) setState(() => _barAtBottom = atBottom);
   }
 
@@ -100,12 +109,10 @@ class _BlockBoxState extends State<BlockBox> {
               onPressed: widget.onToggleReveal,
               child: Text(b.revealed ? '가리기' : '해제'),
             ),
-          IconButton(
-            key: Key('blockDelete-${b.label}'),
-            tooltip: '삭제',
-            iconSize: 20,
-            icon: const Icon(Icons.close),
-            onPressed: widget.onDelete,
+          TextButton(
+            key: Key('blockSelect-${b.label}'),
+            onPressed: widget.onSelect,
+            child: const Text('선택'),
           ),
           IconButton(
             key: Key('blockCut-${b.label}'),
@@ -136,7 +143,7 @@ class _BlockBoxState extends State<BlockBox> {
     );
     final boxes = b.isMasked ? allWords(b.text) : b.hidden;
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 8),
+      margin: const EdgeInsets.symmetric(vertical: _margin),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: theme.colorScheme.outlineVariant),

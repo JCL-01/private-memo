@@ -12,7 +12,7 @@ void main() {
               children: [
                 BlockBox(
                   block: block,
-                  onDelete: () {},
+                  onSelect: () {},
                   onCut: () {},
                   onCopy: () {},
                   onToggleReveal: toggle,
@@ -74,5 +74,32 @@ void main() {
     await tester.pump();
     expect(find.byKey(const Key('blockBar-원본')), findsNothing);
     expect(find.byKey(const Key('blockBarBottom-원본')), findsOneWidget);
+  });
+
+  testWidgets('바가 조금이라도 잘리면 바로 아래로 옮기고, 다 보이면 위에 둔다', (tester) async {
+    final longText = List.generate(80, (i) => '줄 \$i').join('\n');
+    await tester.pumpWidget(
+      host(NoteBlock(kind: BlockKind.original, text: longText)),
+    );
+    await tester.pump();
+    final scroll = find.byType(SingleChildScrollView);
+
+    // 바깥 여백(8)만큼은 올려도 바는 다 보인다 → 위에 그대로
+    await tester.drag(scroll, const Offset(0, -6));
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const Key('blockBar-원본')), findsOneWidget);
+
+    // 바가 4px 잘리면 → 아래로
+    await tester.drag(scroll, const Offset(0, -6));
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const Key('blockBarBottom-원본')), findsOneWidget);
+
+    // 다시 내리면 → 위로
+    await tester.drag(scroll, const Offset(0, 20));
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const Key('blockBar-원본')), findsOneWidget);
   });
 }
