@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 
 import 'box_colors.dart';
 import 'box_painter.dart';
+import 'private_field.dart';
 import 'private_text_controller.dart';
 
 class UndoEditIntent extends Intent {
@@ -30,11 +31,15 @@ class PrivateEditor extends StatefulWidget {
     required this.controller,
     this.focusNode,
     this.style,
+    this.spellCheckService,
   });
 
   final PrivateTextController controller;
   final FocusNode? focusNode;
   final TextStyle? style;
+
+  /// 테스트용: 기기 맞춤법 검사 대신 쓸 서비스.
+  final SpellCheckService? spellCheckService;
 
   @override
   State<PrivateEditor> createState() => _PrivateEditorState();
@@ -46,10 +51,9 @@ class _PrivateEditorState extends State<PrivateEditor> {
 
   PrivateTextController get _c => widget.controller;
 
-  final _fieldKey = GlobalKey();
+  final _editableKey = GlobalKey<EditableTextState>();
   final _paintKey = GlobalKey();
   final _scroll = ScrollController();
-  EditableTextState? _editable;
 
   @override
   void dispose() {
@@ -57,23 +61,10 @@ class _PrivateEditorState extends State<PrivateEditor> {
     super.dispose();
   }
 
-  /// TextField 안의 EditableTextState(박스 위치 계산용).
+  /// 입력창의 RenderEditable(박스 위치 계산용).
   RenderEditable? _findEditable() {
-    final cached = _editable;
-    if (cached != null && cached.mounted) return cached.renderEditable;
-    EditableTextState? found;
-    void visit(Element e) {
-      if (found != null) return;
-      if (e is StatefulElement && e.state is EditableTextState) {
-        found = e.state as EditableTextState;
-        return;
-      }
-      e.visitChildElements(visit);
-    }
-
-    _fieldKey.currentContext?.visitChildElements(visit);
-    _editable = found;
-    return found?.renderEditable;
+    final state = _editableKey.currentState;
+    return state != null && state.mounted ? state.renderEditable : null;
   }
 
   static const _shortcuts = <ShortcutActivator, Intent>{
@@ -203,34 +194,24 @@ class _PrivateEditorState extends State<PrivateEditor> {
                             as RenderBox?,
                     boxColor: boxColorOf(context),
                     boxHeight: (widget.style?.fontSize ?? 16) * 0.95,
-                    underlineColor: Theme.of(context).colorScheme.error,
                     repaint: _scroll,
                   ),
                 ),
               ),
-              KeyedSubtree(key: _fieldKey, child: _buildField()),
+              PrivateField(
+                key: const Key('noteEditor'),
+                controller: _c,
+                editableKey: _editableKey,
+                focusNode: widget.focusNode,
+                style: widget.style,
+                scrollController: _scroll,
+                contextMenuBuilder: _buildContextMenu,
+                hintText: '메모를 입력하세요',
+                spellCheckService: widget.spellCheckService,
+              ),
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildField() {
-    return TextField(
-      scrollController: _scroll,
-      key: const Key('noteEditor'),
-      controller: _c,
-      focusNode: widget.focusNode,
-      maxLines: null,
-      expands: true,
-      keyboardType: TextInputType.multiline,
-      textAlignVertical: TextAlignVertical.top,
-      style: widget.style,
-      contextMenuBuilder: _buildContextMenu,
-      decoration: const InputDecoration(
-        border: InputBorder.none,
-        hintText: '메모를 입력하세요',
       ),
     );
   }

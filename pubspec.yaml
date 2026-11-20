@@ -41,6 +41,7 @@ dependencies:
   path_provider: ^2.1.6
   uuid: ^4.6.0
   intl: ^0.20.3
+  cupertino_ui: ^1.1.7
 
 dev_dependencies:
   flutter_test:
@@ -66,12 +67,6 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
-
-  assets:
-    - assets/dict/ko.aff
-    - assets/dict/ko.dic
-    - assets/dict/LICENSE-ko-dictionary.md
-    - lib/spell/hunspell/LICENSE
 
   # To add assets to your application, add an assets section, like this:
   # assets:
