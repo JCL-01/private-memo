@@ -54,7 +54,11 @@ class _BlockBoxState extends State<BlockBox> {
     super.dispose();
   }
 
-  /// 상단 바가 화면 위로 가려졌는지 확인해 바 위치를 정한다.
+  /// 박스 바깥 여백(위아래).
+  static const _margin = 8.0;
+
+  /// 상단 바가 화면 위로 조금이라도 잘리면 바를 박스 아래로 옮긴다. (F8-2c)
+  /// 박스 위치가 아니라 바 자체가 보이는지로 판단한다.
   void _update() {
     if (!mounted) return;
     final box = context.findRenderObject() as RenderBox?;
@@ -63,11 +67,14 @@ class _BlockBoxState extends State<BlockBox> {
     if (box == null || viewport == null || !box.hasSize || !box.attached) {
       return;
     }
-    final top =
+    final boxTop =
         box.localToGlobal(Offset.zero).dy -
         viewport.localToGlobal(Offset.zero).dy;
-    final bottom = top + box.size.height;
-    final atBottom = top < 0 && bottom > _barHeight * 2;
+    // 상단 바가 있을 자리의 위쪽 끝(바깥 여백 다음).
+    final barTop = boxTop + _margin;
+    // 박스 아래쪽 끝(바깥 여백 앞). 박스가 화면 위로 다 사라졌으면 바를 옮길 필요가 없다.
+    final boxBottom = boxTop + box.size.height - _margin;
+    final atBottom = barTop < 0 && boxBottom > 0;
     if (atBottom != _barAtBottom) setState(() => _barAtBottom = atBottom);
   }
 
@@ -136,7 +143,7 @@ class _BlockBoxState extends State<BlockBox> {
     );
     final boxes = b.isMasked ? allWords(b.text) : b.hidden;
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 8),
+      margin: const EdgeInsets.symmetric(vertical: _margin),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: theme.colorScheme.outlineVariant),
