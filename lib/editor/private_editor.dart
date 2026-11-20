@@ -33,6 +33,7 @@ class PrivateEditor extends StatefulWidget {
     this.focusNode,
     this.style,
     this.spellCheckService,
+    this.readOnly = false,
   });
 
   final PrivateTextController controller;
@@ -41,6 +42,9 @@ class PrivateEditor extends StatefulWidget {
 
   /// 테스트용: 기기 맞춤법 검사 대신 쓸 서비스.
   final SpellCheckService? spellCheckService;
+
+  /// 읽기 전용(최근 삭제된 항목). (F1F-6)
+  final bool readOnly;
 
   @override
   State<PrivateEditor> createState() => _PrivateEditorState();
@@ -243,6 +247,7 @@ class _PrivateEditorState extends State<PrivateEditor> {
                 contextMenuBuilder: _buildContextMenu,
                 hintText: '메모를 입력하세요',
                 spellCheckService: widget.spellCheckService,
+                readOnly: widget.readOnly,
               ),
             ],
           ),

@@ -34,6 +34,7 @@ class PrivateField extends StatefulWidget {
     this.contextMenuBuilder,
     this.hintText,
     this.spellCheckService,
+    this.readOnly = false,
   });
 
   final PrivateTextController controller;
@@ -46,6 +47,9 @@ class PrivateField extends StatefulWidget {
 
   /// 테스트용: 기기 맞춤법 검사 대신 쓸 서비스.
   final SpellCheckService? spellCheckService;
+
+  /// 읽기 전용.
+  final bool readOnly;
 
   @override
   State<PrivateField> createState() => _PrivateFieldState();
@@ -178,6 +182,7 @@ class _PrivateFieldState extends State<PrivateField>
       showSelectionHandles: _showHandles,
       onSelectionChanged: _onSelectionChanged,
       keyboardType: TextInputType.multiline,
+      readOnly: widget.readOnly,
       maxLines: null,
       expands: true,
       rendererIgnoresPointer: true,
@@ -237,6 +242,7 @@ class _PrivateEditableText extends EditableText {
     super.showSelectionHandles,
     super.onSelectionChanged,
     super.keyboardType,
+    super.readOnly,
     super.maxLines,
     super.expands,
     super.rendererIgnoresPointer,
